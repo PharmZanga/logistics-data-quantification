@@ -180,6 +180,7 @@ h1 {
 }
 
 .filters {
+  order: 2;
   min-height: 84px;
   display: grid;
   grid-template-columns: minmax(230px, 0.85fr) minmax(210px, 0.9fr) minmax(320px, 1.6fr) auto;
@@ -250,9 +251,12 @@ button:hover {
 
 .dashboard-main {
   padding: 0 24px 42px;
+  display: flex;
+  flex-direction: column;
 }
 
 .hero {
+  order: 1;
   position: relative;
   min-height: 336px;
   margin-top: 16px;
@@ -366,6 +370,7 @@ dd {
 }
 
 .brief {
+  order: 3;
   margin-top: 16px;
   border-radius: 7px;
   padding: 22px;
@@ -392,6 +397,7 @@ dd {
 }
 
 .kpis {
+  order: 4;
   margin-top: 16px;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -421,6 +427,7 @@ dd {
 }
 
 .layout {
+  order: 5;
   margin-top: 16px;
   display: grid;
   grid-template-columns: 1fr;
@@ -459,6 +466,14 @@ canvas {
 .table-section,
 .data-quality {
   margin-top: 16px;
+}
+
+.table-section {
+  order: 6;
+}
+
+.data-quality {
+  order: 7;
 }
 
 .table-wrap {
