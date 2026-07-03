@@ -13,7 +13,7 @@
           <span class="nav-badge">LC</span>
           <div>
             <strong>Logistics Dashboard</strong>
-            <small>2024-2026 consumption</small>
+            <small>Consumption and adjusted data</small>
           </div>
         </div>
         <nav>
@@ -54,9 +54,9 @@
             <img src="assets/moh-control-tower-header.png" alt="" />
             <div class="hero-copy">
               <span>Jan 2024-May 2026</span>
-              <h2>Monthly consumption by commodity</h2>
+              <h2>Consumption, adjusted consumption, and difference</h2>
               <p>
-                Search a commodity and review essential medicines consumption from January 2024 through May 2026.
+                Search a commodity and review consumption from 2024 to 2026 with the available adjusted consumption and difference for 2025.
               </p>
             </div>
             <div id="commodity" class="selected-card">
@@ -68,7 +68,7 @@
                   <dd id="packSize">-</dd>
                 </div>
                 <div>
-                  <dt>Period</dt>
+                  <dt>Adjusted data</dt>
                   <dd id="pairStatus">-</dd>
                 </div>
               </dl>
@@ -94,7 +94,7 @@
 
           <section class="brief">
             <span>Leadership Brief</span>
-            <strong>Commodity consumption review from 2024 to 2026.</strong>
+            <strong>Commodity consumption review with available 2025 adjusted values.</strong>
             <p id="qualityNote"></p>
           </section>
 
@@ -104,7 +104,7 @@
               <strong id="kpiReported">0</strong>
             </article>
             <article>
-              <span>Active months</span>
+              <span>Total adjusted consumption</span>
               <strong id="kpiAdjusted">0</strong>
             </article>
             <article>
@@ -124,8 +124,8 @@
           <section id="charts" class="layout">
             <div class="chart-panel wide">
               <div class="panel-heading">
-                <h2>Monthly Consumption Trend</h2>
-                <span>Jan 2024-May 2026</span>
+                <h2>Consumption vs Adjusted Consumption</h2>
+                <span>Adjusted values available for 2025</span>
               </div>
               <canvas id="comparisonChart" height="300"></canvas>
             </div>
@@ -133,7 +133,7 @@
             <div class="chart-panel wide">
               <div class="panel-heading">
                 <h2>Annual Consumption Summary</h2>
-                <span>Totals by year</span>
+                <span>Consumption totals by year</span>
               </div>
               <canvas id="differenceChart" height="280"></canvas>
             </div>
@@ -143,7 +143,7 @@
             <div class="panel-heading">
               <div>
                 <h2>Commodity Output Table</h2>
-                <span id="tableNote">Selected commodity row only</span>
+                <span id="tableNote">Selected commodity: consumption, adjusted, difference</span>
               </div>
             </div>
             <div class="table-wrap">
@@ -156,7 +156,7 @@
 
           <section id="quality" class="data-quality">
             <h2>Data Quality Notes</h2>
-            <p>Blank product-description rows are skipped and are not treated as separate commodities.</p>
+            <p>Adjusted consumption is currently available for 2025 only. Adjusted cells outside 2025 remain unavailable until the 2024 and 2026 adjusted workbooks are uploaded.</p>
           </section>
         </main>
       </div>

@@ -28,6 +28,7 @@ const els = {
 const fmt = new Intl.NumberFormat("en-US");
 
 function formatNumber(value) {
+  if (value === null || value === undefined) return "-";
   return fmt.format(Math.round(Number(value) || 0));
 }
 
@@ -82,40 +83,67 @@ function drawConsumptionTrend(item) {
   const padding = { top: 24, right: 32, bottom: 64, left: 92 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
-  const maxValue = Math.max(...item.values, 1);
+  const adjustedOnly = item.adjustedValues.filter((value) => value !== null && value !== undefined);
+  const maxValue = Math.max(...item.values, ...adjustedOnly, 1);
 
   drawFrame(ctx, width, height, padding, maxValue);
 
-  const points = item.monthly.map((entry, index) => ({
-    x: padding.left + (chartWidth * index) / Math.max(item.monthly.length - 1, 1),
-    y: padding.top + chartHeight - (entry.value / maxValue) * chartHeight,
-    label: entry.month,
-  }));
+  function pointsFor(field) {
+    return item.monthly
+      .map((entry, index) => {
+        const value = entry[field];
+        if (value === null || value === undefined) return null;
+        return {
+          x: padding.left + (chartWidth * index) / Math.max(item.monthly.length - 1, 1),
+          y: padding.top + chartHeight - (value / maxValue) * chartHeight,
+          label: entry.month,
+        };
+      })
+      .filter(Boolean);
+  }
 
-  ctx.beginPath();
-  points.forEach((point, index) => {
-    if (index === 0) ctx.moveTo(point.x, point.y);
-    else ctx.lineTo(point.x, point.y);
-  });
-  ctx.strokeStyle = "#0f766e";
-  ctx.lineWidth = 3;
-  ctx.stroke();
-
-  points.forEach((point, index) => {
-    ctx.fillStyle = "#0f766e";
+  function drawLine(field, color) {
+    const points = pointsFor(field);
     ctx.beginPath();
-    ctx.arc(point.x, point.y, 3.5, 0, Math.PI * 2);
-    ctx.fill();
+    points.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    points.forEach((point) => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  drawLine("value", "#0f766e");
+  drawLine("adjusted", "#1d4ed8");
+
+  item.monthly.forEach((entry, index) => {
     if (index % 2 === 0 || item.monthly.length <= 16) {
+      const x = padding.left + (chartWidth * index) / Math.max(item.monthly.length - 1, 1);
       ctx.save();
-      ctx.translate(point.x, height - 20);
+      ctx.translate(x, height - 20);
       ctx.rotate(-Math.PI / 5);
       ctx.fillStyle = "#5d6b78";
       ctx.textAlign = "right";
-      ctx.fillText(point.label, 0, 0);
+      ctx.fillText(entry.month, 0, 0);
       ctx.restore();
     }
   });
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#0f766e";
+  ctx.fillRect(width - 230, 18, 12, 12);
+  ctx.fillText("Consumption", width - 212, 29);
+  ctx.fillStyle = "#1d4ed8";
+  ctx.fillRect(width - 125, 18, 12, 12);
+  ctx.fillText("Adjusted", width - 107, 29);
 }
 
 function drawAnnualChart(item) {
@@ -162,7 +190,7 @@ function renderOptions() {
 
 function renderKpis(item) {
   els.kpiReported.textContent = formatNumber(item.total);
-  els.kpiAdjusted.textContent = formatNumber(item.activeMonths);
+  els.kpiAdjusted.textContent = item.hasAdjusted2025 ? formatNumber(item.adjusted2025Total) : "-";
   els.kpiAverage.textContent = formatNumber(item.averageMonthly);
   els.kpiHighest.textContent = `${item.highestMonth} (${formatNumber(item.highestValue)})`;
   els.kpiLowest.textContent = `${item.lowestMonth} (${formatNumber(item.lowestValue)})`;
@@ -171,7 +199,12 @@ function renderKpis(item) {
 function renderProduct(item) {
   els.productName.textContent = item.product;
   els.packSize.textContent = item.packSize;
-  els.pairStatus.textContent = data.source.period;
+  els.pairStatus.textContent = item.hasAdjusted2025 ? "2025 adjusted data matched" : "No 2025 adjusted row matched";
+}
+
+function valueClass(value) {
+  if (value === null || value === undefined || value === 0) return "";
+  return value > 0 ? "positive" : "negative";
 }
 
 function renderWideTable(item) {
@@ -179,6 +212,7 @@ function renderWideTable(item) {
     <tr>
       <th>Product Description</th>
       <th>Pack Size</th>
+      <th>Data Type</th>
       ${data.months.map((month) => `<th class="num">${month}</th>`).join("")}
     </tr>
   `;
@@ -187,7 +221,20 @@ function renderWideTable(item) {
     <tr class="selected-row" data-id="${item.id}">
       <td>${item.product}</td>
       <td>${item.packSize}</td>
+      <td>Consumption</td>
       ${item.values.map((value) => `<td class="num">${formatNumber(value)}</td>`).join("")}
+    </tr>
+    <tr>
+      <td>${item.product}</td>
+      <td>${item.packSize}</td>
+      <td>Adjusted Consumption</td>
+      ${item.adjustedValues.map((value) => `<td class="num">${formatNumber(value)}</td>`).join("")}
+    </tr>
+    <tr>
+      <td>${item.product}</td>
+      <td>${item.packSize}</td>
+      <td>Difference</td>
+      ${item.differenceValues.map((value) => `<td class="num ${valueClass(value)}">${formatNumber(value)}</td>`).join("")}
     </tr>
   `;
 
@@ -207,15 +254,19 @@ function render() {
 
 function downloadCsv() {
   const item = selectedCommodity();
-  const headers = ["Product Description", "Pack Size", ...data.months];
-  const body = [[item.product, item.packSize, ...item.values]];
+  const headers = ["Product Description", "Pack Size", "Data Type", ...data.months];
+  const body = [
+    [item.product, item.packSize, "Consumption", ...item.values],
+    [item.product, item.packSize, "Adjusted Consumption", ...item.adjustedValues.map((value) => value ?? "")],
+    [item.product, item.packSize, "Difference", ...item.differenceValues.map((value) => value ?? "")],
+  ];
   const csv = [headers, ...body]
     .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
     .join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = "em-consumption-2024-2026.csv";
+  link.download = "em-consumption-adjusted-difference.csv";
   link.click();
   URL.revokeObjectURL(link.href);
 }
@@ -223,7 +274,9 @@ function downloadCsv() {
 function init() {
   els.qualityNote.textContent = `${formatNumber(data.source.rawRows)} Excel rows were read from ${data.source.sheet}. ${formatNumber(
     data.source.commodityRows,
-  )} commodity rows are shown from ${data.source.period}. Blank product-description rows are not treated as products.`;
+  )} commodity rows are shown from ${data.source.period}. 2025 adjusted consumption is matched from ${data.source.adjustedFileName}; ${formatNumber(
+    data.source.adjustedMatchedCommodityRows,
+  )} selected consumption rows have a matching adjusted row. Adjusted cells outside 2025 show as unavailable until those files are uploaded.`;
 
   els.searchInput.addEventListener("input", (event) => {
     state.search = event.target.value;
