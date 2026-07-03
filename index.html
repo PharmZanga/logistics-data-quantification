@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NSCCU Logistics Data Quantification Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <img src="assets/moh-control-tower-header.png" alt="" class="header-bg" />
+      <div class="header-content">
+        <div>
+          <p class="eyebrow">National Supply Chain Coordinating Unit</p>
+          <h1>Logistics Data Quantification Dashboard</h1>
+          <p class="subtitle">2025 national consumption profile by commodity, pack size, monthly demand, and quantification priority.</p>
+        </div>
+        <div class="source-chip">
+          <span>Source</span>
+          <strong id="sourceFile">Excel workbook</strong>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="filters" aria-label="Dashboard filters">
+        <label>
+          <span>Commodity</span>
+          <input id="searchInput" type="search" placeholder="Search commodity..." />
+        </label>
+        <label>
+          <span>Pack size</span>
+          <select id="packFilter"></select>
+        </label>
+        <label>
+          <span>ABC class</span>
+          <select id="abcFilter">
+            <option value="all">All classes</option>
+            <option value="A">A - high value</option>
+            <option value="B">B - medium value</option>
+            <option value="C">C - long tail</option>
+          </select>
+        </label>
+        <label>
+          <span>Consumption band</span>
+          <select id="bandFilter">
+            <option value="all">All bands</option>
+            <option value="high">High demand</option>
+            <option value="steady">Steady demand</option>
+            <option value="intermittent">Intermittent demand</option>
+          </select>
+        </label>
+        <button id="resetButton" type="button">Reset</button>
+      </section>
+
+      <section class="kpis" aria-label="Summary indicators">
+        <article>
+          <span>Total annual consumption</span>
+          <strong id="kpiTotal">0</strong>
+        </article>
+        <article>
+          <span>Commodities visible</span>
+          <strong id="kpiCommodities">0</strong>
+        </article>
+        <article>
+          <span>Average monthly demand</span>
+          <strong id="kpiMonthly">0</strong>
+        </article>
+        <article>
+          <span>Peak demand month</span>
+          <strong id="kpiPeak">-</strong>
+        </article>
+      </section>
+
+      <section class="layout">
+        <div class="chart-panel wide">
+          <div class="panel-heading">
+            <h2>Monthly Consumption Trend</h2>
+            <span id="trendNote"></span>
+          </div>
+          <canvas id="monthlyChart" height="260"></canvas>
+        </div>
+
+        <div class="chart-panel">
+          <div class="panel-heading">
+            <h2>Top Commodities</h2>
+            <span>Annual quantity</span>
+          </div>
+          <canvas id="topChart" height="320"></canvas>
+        </div>
+
+        <div class="chart-panel">
+          <div class="panel-heading">
+            <h2>ABC Distribution</h2>
+            <span>Demand contribution</span>
+          </div>
+          <canvas id="abcChart" height="320"></canvas>
+        </div>
+      </section>
+
+      <section class="table-section">
+        <div class="panel-heading">
+          <div>
+            <h2>Commodity Output Table</h2>
+            <span id="tableNote">Sorted by annual consumption</span>
+          </div>
+          <button id="downloadButton" type="button">Download CSV</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Commodity</th>
+                <th>Pack</th>
+                <th>ABC</th>
+                <th>Annual total</th>
+                <th>Monthly avg</th>
+                <th>Active months</th>
+                <th>Peak month</th>
+                <th>Peak qty</th>
+              </tr>
+            </thead>
+            <tbody id="commodityTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="data-quality">
+        <h2>Data Quality Notes</h2>
+        <p id="qualityNote"></p>
+      </section>
+    </main>
+
+    <script src="data/dashboard-data.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
