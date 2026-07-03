@@ -240,7 +240,9 @@ function downloadCsv() {
 }
 
 function init() {
-  els.sourceFile.textContent = data.source.fileName;
+  if (els.sourceFile) {
+    els.sourceFile.textContent = data.source.fileName;
+  }
   els.qualityNote.textContent = `${formatNumber(data.source.rawRows)} Excel rows were read from ${data.source.sheet}. ${formatNumber(
     data.source.reportedCommodityRows,
   )} named product rows were loaded as reported consumption. ${formatNumber(

@@ -7,118 +7,167 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header class="app-header">
-      <img src="assets/moh-control-tower-header.png" alt="" class="header-bg" />
-      <div class="header-content">
-        <div>
-          <p class="eyebrow">National Supply Chain Coordinating Unit</p>
-          <h1>Logistics Data Quantification Dashboard</h1>
-          <p class="subtitle">Search a commodity and compare reported monthly consumption with the adjusted consumption row from January to December 2025.</p>
-        </div>
-        <div class="source-chip">
-          <span>Source</span>
-          <strong id="sourceFile">Excel workbook</strong>
-        </div>
-      </div>
-    </header>
-
-    <main>
-      <section class="filters" aria-label="Dashboard filters">
-        <label>
-          <span>Search commodity</span>
-          <input id="searchInput" type="search" placeholder="Search commodity..." />
-        </label>
-        <label>
-          <span>Select commodity</span>
-          <select id="commoditySelect"></select>
-        </label>
-        <button id="resetButton" type="button">Reset</button>
-      </section>
-
-      <section class="selected-product" aria-label="Selected commodity">
-        <div>
-          <span>Selected commodity</span>
-          <strong id="productName">-</strong>
-        </div>
-        <div>
-          <span>Pack size</span>
-          <strong id="packSize">-</strong>
-        </div>
-        <div>
-          <span>Adjusted row status</span>
-          <strong id="pairStatus">-</strong>
-        </div>
-      </section>
-
-      <section class="kpis" aria-label="Summary indicators">
-        <article>
-          <span>Total reported consumption</span>
-          <strong id="kpiReported">0</strong>
-        </article>
-        <article>
-          <span>Total adjusted consumption</span>
-          <strong id="kpiAdjusted">0</strong>
-        </article>
-        <article>
-          <span>Average monthly adjusted</span>
-          <strong id="kpiAverage">0</strong>
-        </article>
-        <article>
-          <span>Highest consumption month</span>
-          <strong id="kpiHighest">-</strong>
-        </article>
-        <article>
-          <span>Lowest consumption month</span>
-          <strong id="kpiLowest">-</strong>
-        </article>
-      </section>
-
-      <section class="layout">
-        <div class="chart-panel wide">
-          <div class="panel-heading">
-            <h2>Reported vs Adjusted Consumption</h2>
-            <span>Jan-Dec 2025</span>
-          </div>
-          <canvas id="comparisonChart" height="300"></canvas>
-        </div>
-
-        <div class="chart-panel wide">
-          <div class="panel-heading">
-            <h2>Monthly Difference</h2>
-            <span>Adjusted minus reported</span>
-          </div>
-          <canvas id="differenceChart" height="280"></canvas>
-        </div>
-      </section>
-
-      <section class="table-section">
-        <div class="panel-heading">
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Dashboard sections">
+        <div class="sidebar-title">
+          <span class="nav-badge">LC</span>
           <div>
-            <h2>Commodity Output Table</h2>
-            <span id="tableNote">Difference = adjusted minus reported</span>
+            <strong>Logistics Dashboard</strong>
+            <small>Reported vs adjusted consumption</small>
           </div>
-          <button id="downloadButton" type="button">Download CSV</button>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Month</th>
-                <th>Reported Consumption</th>
-                <th>Adjusted Consumption</th>
-                <th>Difference</th>
-              </tr>
-            </thead>
-            <tbody id="monthlyTable"></tbody>
-          </table>
-        </div>
-      </section>
+        <nav>
+          <a class="active" href="#summary"><span>EX</span>Executive Summary</a>
+          <a href="#commodity"><span>CI</span>Commodity Intelligence</a>
+          <a href="#charts"><span>CH</span>Consumption Charts</a>
+          <a href="#output"><span>OT</span>Output Table</a>
+          <a href="#quality"><span>DQ</span>Data Quality</a>
+        </nav>
+      </aside>
 
-      <section class="data-quality">
-        <h2>Data Quality Notes</h2>
-        <p id="qualityNote"></p>
-      </section>
-    </main>
+      <div class="page">
+        <header class="topbar">
+          <div class="brand-lockup">
+            <img src="assets/zambia-coat-of-arms.svg" alt="Republic of Zambia coat of arms" />
+            <div>
+              <span>Republic of Zambia</span>
+              <strong>Ministry of Health</strong>
+            </div>
+          </div>
+
+          <div class="topbar-title">
+            <span>Essential Medicines Consumption</span>
+            <h1>National Logistics Quantification Dashboard</h1>
+          </div>
+
+          <div class="brand-lockup control-lockup">
+            <img src="assets/control-tower-logo.svg" alt="Control Tower logo" />
+            <div>
+              <span>Control Tower</span>
+              <strong>National Supply Chain<br />Coordinating Unit</strong>
+            </div>
+          </div>
+        </header>
+
+        <section class="filters" aria-label="Dashboard filters">
+          <div class="breadcrumb">
+            <span>National Supply Chain Coordinating Unit</span>
+            <strong>Executive Summary</strong>
+          </div>
+          <label>
+            <span>Search commodity</span>
+            <input id="searchInput" type="search" placeholder="Search commodity..." />
+          </label>
+          <label>
+            <span>Select commodity</span>
+            <select id="commoditySelect"></select>
+          </label>
+          <button id="resetButton" type="button">Clear</button>
+        </section>
+
+        <main class="dashboard-main">
+          <section id="summary" class="hero">
+            <img src="assets/moh-control-tower-header.png" alt="" />
+            <div class="hero-copy">
+              <span>Jan-Dec 2025</span>
+              <h2>Reported vs adjusted consumption by commodity</h2>
+              <p>
+                Search a commodity and compare the original reported monthly consumption with the blank-row adjusted values from the source workbook.
+              </p>
+            </div>
+            <div id="commodity" class="selected-card">
+              <span>Selected commodity</span>
+              <strong id="productName">-</strong>
+              <dl>
+                <div>
+                  <dt>Pack size</dt>
+                  <dd id="packSize">-</dd>
+                </div>
+                <div>
+                  <dt>Adjusted row</dt>
+                  <dd id="pairStatus">-</dd>
+                </div>
+              </dl>
+              <button id="downloadButton" type="button">Export commodity CSV</button>
+            </div>
+          </section>
+
+          <section class="brief">
+            <span>Leadership Brief</span>
+            <strong>Commodity consumption review for reported and adjusted values.</strong>
+            <p id="qualityNote"></p>
+          </section>
+
+          <section class="kpis" aria-label="Summary indicators">
+            <article>
+              <span>Total reported consumption</span>
+              <strong id="kpiReported">0</strong>
+            </article>
+            <article>
+              <span>Total adjusted consumption</span>
+              <strong id="kpiAdjusted">0</strong>
+            </article>
+            <article>
+              <span>Average monthly adjusted</span>
+              <strong id="kpiAverage">0</strong>
+            </article>
+            <article>
+              <span>Highest consumption month</span>
+              <strong id="kpiHighest">-</strong>
+            </article>
+            <article>
+              <span>Lowest consumption month</span>
+              <strong id="kpiLowest">-</strong>
+            </article>
+          </section>
+
+          <section id="charts" class="layout">
+            <div class="chart-panel wide">
+              <div class="panel-heading">
+                <h2>Reported vs Adjusted Consumption</h2>
+                <span>Jan-Dec 2025</span>
+              </div>
+              <canvas id="comparisonChart" height="300"></canvas>
+            </div>
+
+            <div class="chart-panel wide">
+              <div class="panel-heading">
+                <h2>Monthly Difference</h2>
+                <span>Adjusted minus reported</span>
+              </div>
+              <canvas id="differenceChart" height="280"></canvas>
+            </div>
+          </section>
+
+          <section id="output" class="table-section">
+            <div class="panel-heading">
+              <div>
+                <h2>Commodity Output Table</h2>
+                <span id="tableNote">Difference = adjusted minus reported</span>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th>Reported Consumption</th>
+                    <th>Adjusted Consumption</th>
+                    <th>Difference</th>
+                  </tr>
+                </thead>
+                <tbody id="monthlyTable"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="quality" class="data-quality">
+            <h2>Data Quality Notes</h2>
+            <p>Blank product-description rows are used only as adjusted consumption for the named commodity immediately above them.</p>
+          </section>
+        </main>
+      </div>
+    </div>
 
     <script src="data/dashboard-data.js"></script>
     <script src="app.js"></script>
