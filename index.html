@@ -13,7 +13,7 @@
           <span class="nav-badge">LC</span>
           <div>
             <strong>Logistics Dashboard</strong>
-            <small>Reported vs adjusted consumption</small>
+            <small>2024-2026 consumption</small>
           </div>
         </div>
         <nav>
@@ -69,10 +69,10 @@
           <section id="summary" class="hero">
             <img src="assets/moh-control-tower-header.png" alt="" />
             <div class="hero-copy">
-              <span>Jan-Dec 2025</span>
-              <h2>Reported vs adjusted consumption by commodity</h2>
+              <span>Jan 2024-May 2026</span>
+              <h2>Monthly consumption by commodity</h2>
               <p>
-                Search a commodity and compare the original reported monthly consumption with the blank-row adjusted values from the source workbook.
+                Search a commodity and review essential medicines consumption from January 2024 through May 2026.
               </p>
             </div>
             <div id="commodity" class="selected-card">
@@ -84,7 +84,7 @@
                   <dd id="packSize">-</dd>
                 </div>
                 <div>
-                  <dt>Adjusted row</dt>
+                  <dt>Period</dt>
                   <dd id="pairStatus">-</dd>
                 </div>
               </dl>
@@ -94,21 +94,21 @@
 
           <section class="brief">
             <span>Leadership Brief</span>
-            <strong>Commodity consumption review for reported and adjusted values.</strong>
+            <strong>Commodity consumption review from 2024 to 2026.</strong>
             <p id="qualityNote"></p>
           </section>
 
           <section class="kpis" aria-label="Summary indicators">
             <article>
-              <span>Total reported consumption</span>
+              <span>Total consumption</span>
               <strong id="kpiReported">0</strong>
             </article>
             <article>
-              <span>Total adjusted consumption</span>
+              <span>Active months</span>
               <strong id="kpiAdjusted">0</strong>
             </article>
             <article>
-              <span>Average monthly adjusted</span>
+              <span>Average monthly consumption</span>
               <strong id="kpiAverage">0</strong>
             </article>
             <article>
@@ -124,16 +124,16 @@
           <section id="charts" class="layout">
             <div class="chart-panel wide">
               <div class="panel-heading">
-                <h2>Reported vs Adjusted Consumption</h2>
-                <span>Jan-Dec 2025</span>
+                <h2>Monthly Consumption Trend</h2>
+                <span>Jan 2024-May 2026</span>
               </div>
               <canvas id="comparisonChart" height="300"></canvas>
             </div>
 
             <div class="chart-panel wide">
               <div class="panel-heading">
-                <h2>Monthly Difference</h2>
-                <span>Adjusted minus reported</span>
+                <h2>Annual Consumption Summary</h2>
+                <span>Totals by year</span>
               </div>
               <canvas id="differenceChart" height="280"></canvas>
             </div>
@@ -143,19 +143,12 @@
             <div class="panel-heading">
               <div>
                 <h2>Commodity Output Table</h2>
-                <span id="tableNote">Difference = adjusted minus reported</span>
+                <span id="tableNote">Wide row format from Excel</span>
               </div>
             </div>
             <div class="table-wrap">
               <table>
-                <thead>
-                  <tr>
-                    <th>Month</th>
-                    <th>Reported Consumption</th>
-                    <th>Adjusted Consumption</th>
-                    <th>Difference</th>
-                  </tr>
-                </thead>
+                <thead id="tableHead"></thead>
                 <tbody id="monthlyTable"></tbody>
               </table>
             </div>
@@ -163,7 +156,7 @@
 
           <section id="quality" class="data-quality">
             <h2>Data Quality Notes</h2>
-            <p>Blank product-description rows are used only as adjusted consumption for the named commodity immediately above them.</p>
+            <p>Blank product-description rows are skipped and are not treated as separate commodities.</p>
           </section>
         </main>
       </div>

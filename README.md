@@ -1,13 +1,13 @@
 # Logistics Data Quantification Dashboard
 
-Static national supply chain coordinating unit dashboard for 2025 essential medicines reported vs adjusted consumption data.
+Static national supply chain coordinating unit dashboard for essential medicines consumption data from 2024 to 2026.
 
 ## Contents
 
 - `index.html` - dashboard shell
 - `styles.css` - dashboard styling
 - `app.js` - filters, charts, and table logic
-- `data/dashboard-data.js` - generated reported/adjusted commodity consumption data
+- `data/dashboard-data.js` - generated commodity consumption data
 - `tools/extract_consumption_data.py` - rebuilds the data file from the source workbook
 
 ## Run Locally
@@ -20,4 +20,4 @@ Open `index.html` directly in a browser, or serve the folder with any static web
 python tools/extract_consumption_data.py
 ```
 
-The extraction script reads every named `Products Description` row as reported consumption. If the next row has a blank product description, that row is attached to the same commodity as adjusted consumption. Missing monthly values are treated as zero.
+The extraction script reads every named `Products Description` row as one commodity row, keeps the wide month-column format from the workbook, and treats missing monthly values as zero. Blank product-description rows are skipped.

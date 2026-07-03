@@ -466,7 +466,7 @@ canvas {
 
 table {
   width: 100%;
-  min-width: 680px;
+  min-width: 2200px;
   border-collapse: collapse;
   background: #ffffff;
 }
@@ -493,6 +493,20 @@ th {
 td.num,
 th.num {
   text-align: right;
+  white-space: nowrap;
+}
+
+tbody tr {
+  cursor: pointer;
+}
+
+tbody tr:hover {
+  background: #f5fbf8;
+}
+
+.selected-row {
+  background: #e8f7ef;
+  box-shadow: inset 4px 0 0 var(--green-600);
 }
 
 .positive {
