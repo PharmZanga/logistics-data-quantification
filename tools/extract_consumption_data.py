@@ -29,83 +29,100 @@ def clean_text(value):
     return " ".join(str(value).strip().split())
 
 
+def month_value(row, column):
+    value = pd.to_numeric(row.get(column), errors="coerce")
+    if pd.isna(value):
+        return 0
+    return int(round(float(value)))
+
+
+def build_monthly(reported_row, adjusted_row):
+    monthly = []
+    for raw_month, label in MONTH_COLUMNS:
+        reported = month_value(reported_row, raw_month)
+        adjusted = month_value(adjusted_row, raw_month) if adjusted_row is not None else 0
+        monthly.append(
+            {
+                "month": label,
+                "reported": reported,
+                "adjusted": adjusted,
+                "difference": adjusted - reported,
+            }
+        )
+    return monthly
+
+
 def main():
     df = pd.read_excel(SOURCE, sheet_name="Sheet1")
     raw_rows = len(df)
-    blank_product_rows = int(df["Products Description"].isna().sum())
 
-    df = df[df["Products Description"].notna()].copy()
-    df["Products Description"] = df["Products Description"].map(clean_text)
-    df["Pack Size"] = df["Pack Size"].map(clean_text)
-    for raw_month, _ in MONTH_COLUMNS:
-        df[raw_month] = pd.to_numeric(df[raw_month], errors="coerce").fillna(0)
+    commodities = []
+    adjusted_pair_count = 0
+    skipped_blank_rows = 0
 
-    grouped = (
-        df.groupby(["Products Description", "Pack Size"], dropna=False)[[m[0] for m in MONTH_COLUMNS]]
-        .sum()
-        .reset_index()
-    )
+    index = 0
+    while index < len(df):
+        row = df.iloc[index]
+        product = clean_text(row.get("Products Description"))
 
-    records = []
-    totals_by_month = {label: 0 for _, label in MONTH_COLUMNS}
-    for index, row in grouped.iterrows():
-        monthly = []
-        values = []
-        for raw_month, label in MONTH_COLUMNS:
-            value = int(round(float(row[raw_month])))
-            monthly.append({"month": label, "value": value})
-            values.append(value)
-            totals_by_month[label] += value
+        if not product:
+            skipped_blank_rows += 1
+            index += 1
+            continue
 
-        total = int(sum(values))
-        active_months = sum(1 for value in values if value > 0)
-        average = total / 12 if values else 0
-        peak = max(values) if values else 0
-        low_nonzero = min([value for value in values if value > 0], default=0)
-        volatility = 0
-        if average > 0:
-            volatility = float(pd.Series(values).std(ddof=0) / average)
+        pack_size = clean_text(row.get("Pack Size")) or "Not specified"
+        adjusted_row = None
+        if index + 1 < len(df):
+            next_row = df.iloc[index + 1]
+            next_product = clean_text(next_row.get("Products Description"))
+            if not next_product:
+                adjusted_row = next_row
+                adjusted_pair_count += 1
 
-        records.append(
+        monthly = build_monthly(row, adjusted_row)
+        reported_values = [entry["reported"] for entry in monthly]
+        adjusted_values = [entry["adjusted"] for entry in monthly]
+        difference_values = [entry["difference"] for entry in monthly]
+        total_reported = int(sum(reported_values))
+        total_adjusted = int(sum(adjusted_values))
+        highest_entry = max(monthly, key=lambda entry: entry["adjusted"])
+        lowest_entry = min(monthly, key=lambda entry: entry["adjusted"])
+
+        commodities.append(
             {
-                "id": index + 1,
-                "product": row["Products Description"],
-                "packSize": row["Pack Size"] or "Not specified",
+                "id": len(commodities) + 1,
+                "sourceRow": index + 2,
+                "product": product,
+                "packSize": pack_size,
+                "hasAdjustedRow": adjusted_row is not None,
                 "monthly": monthly,
-                "total": total,
-                "averageMonthly": round(average, 1),
-                "activeMonths": active_months,
-                "peakMonth": MONTH_COLUMNS[values.index(peak)][1] if values else "",
-                "peakValue": peak,
-                "lowNonZero": low_nonzero,
-                "volatility": round(volatility, 3),
+                "totalReported": total_reported,
+                "totalAdjusted": total_adjusted,
+                "totalDifference": int(sum(difference_values)),
+                "averageAdjusted": round(total_adjusted / 12, 1),
+                "highestMonth": highest_entry["month"],
+                "highestValue": highest_entry["adjusted"],
+                "lowestMonth": lowest_entry["month"],
+                "lowestValue": lowest_entry["adjusted"],
             }
         )
 
-    records.sort(key=lambda item: item["total"], reverse=True)
-    grand_total = sum(item["total"] for item in records)
-    cumulative = 0
-    for rank, item in enumerate(records, start=1):
-        cumulative += item["total"]
-        item["rank"] = rank
-        share = item["total"] / grand_total if grand_total else 0
-        item["share"] = round(share, 5)
-        item["abcClass"] = "A" if cumulative / grand_total <= 0.8 else "B" if cumulative / grand_total <= 0.95 else "C"
+        index += 2 if adjusted_row is not None else 1
 
     payload = {
         "source": {
             "fileName": SOURCE.name,
             "sheet": "Sheet1",
             "rawRows": raw_rows,
-            "namedCommodityRows": int(len(df)),
-            "blankProductRows": blank_product_rows,
-            "aggregatedCommodities": len(records),
+            "reportedCommodityRows": len(commodities),
+            "adjustedPairs": adjusted_pair_count,
+            "unpairedReportedRows": len(commodities) - adjusted_pair_count,
+            "skippedBlankRows": skipped_blank_rows,
             "generatedFrom": str(SOURCE),
-            "period": "2025",
+            "period": "Jan-Dec 2025",
         },
         "months": [label for _, label in MONTH_COLUMNS],
-        "totalsByMonth": [{"month": month, "value": value} for month, value in totals_by_month.items()],
-        "commodities": records,
+        "commodities": commodities,
     }
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
@@ -116,8 +133,8 @@ def main():
         encoding="utf-8",
     )
     print(f"Wrote {OUTPUT}")
-    print(f"Aggregated commodities: {len(records):,}")
-    print(f"Grand total: {grand_total:,}")
+    print(f"Reported commodity rows: {len(commodities):,}")
+    print(f"Reported rows with adjusted pair: {adjusted_pair_count:,}")
 
 
 if __name__ == "__main__":

@@ -1,27 +1,25 @@
 const data = window.NSCCU_DASHBOARD_DATA;
 const state = {
   search: "",
-  pack: "all",
-  abc: "all",
-  band: "all",
+  selectedId: data.commodities[0]?.id || null,
 };
 
 const els = {
   sourceFile: document.getElementById("sourceFile"),
   searchInput: document.getElementById("searchInput"),
-  packFilter: document.getElementById("packFilter"),
-  abcFilter: document.getElementById("abcFilter"),
-  bandFilter: document.getElementById("bandFilter"),
+  commoditySelect: document.getElementById("commoditySelect"),
   resetButton: document.getElementById("resetButton"),
-  kpiTotal: document.getElementById("kpiTotal"),
-  kpiCommodities: document.getElementById("kpiCommodities"),
-  kpiMonthly: document.getElementById("kpiMonthly"),
-  kpiPeak: document.getElementById("kpiPeak"),
-  trendNote: document.getElementById("trendNote"),
-  monthlyChart: document.getElementById("monthlyChart"),
-  topChart: document.getElementById("topChart"),
-  abcChart: document.getElementById("abcChart"),
-  table: document.getElementById("commodityTable"),
+  productName: document.getElementById("productName"),
+  packSize: document.getElementById("packSize"),
+  pairStatus: document.getElementById("pairStatus"),
+  kpiReported: document.getElementById("kpiReported"),
+  kpiAdjusted: document.getElementById("kpiAdjusted"),
+  kpiAverage: document.getElementById("kpiAverage"),
+  kpiHighest: document.getElementById("kpiHighest"),
+  kpiLowest: document.getElementById("kpiLowest"),
+  comparisonChart: document.getElementById("comparisonChart"),
+  differenceChart: document.getElementById("differenceChart"),
+  monthlyTable: document.getElementById("monthlyTable"),
   tableNote: document.getElementById("tableNote"),
   downloadButton: document.getElementById("downloadButton"),
   qualityNote: document.getElementById("qualityNote"),
@@ -30,37 +28,47 @@ const els = {
 const fmt = new Intl.NumberFormat("en-US");
 
 function formatNumber(value) {
-  return fmt.format(Math.round(value || 0));
+  return fmt.format(Math.round(Number(value) || 0));
 }
 
-function getBand(item) {
-  if (item.total >= 1000000) return "high";
-  if (item.activeMonths >= 9) return "steady";
-  return "intermittent";
+function optionLabel(item) {
+  return `${item.product} | ${item.packSize} | Row ${item.sourceRow}`;
 }
 
-function filteredData() {
+function filteredCommodities() {
   const term = state.search.trim().toLowerCase();
-  return data.commodities.filter((item) => {
-    const matchesSearch = !term || item.product.toLowerCase().includes(term);
-    const matchesPack = state.pack === "all" || item.packSize === state.pack;
-    const matchesAbc = state.abc === "all" || item.abcClass === state.abc;
-    const matchesBand = state.band === "all" || getBand(item) === state.band;
-    return matchesSearch && matchesPack && matchesAbc && matchesBand;
-  });
+  if (!term) return data.commodities;
+  return data.commodities.filter((item) => `${item.product} ${item.packSize}`.toLowerCase().includes(term));
 }
 
-function monthTotals(items) {
-  return data.months.map((month) => ({
-    month,
-    value: items.reduce((sum, item) => {
-      const hit = item.monthly.find((entry) => entry.month === month);
-      return sum + (hit ? hit.value : 0);
-    }, 0),
-  }));
+function selectedCommodity() {
+  return data.commodities.find((item) => item.id === Number(state.selectedId)) || data.commodities[0];
 }
 
-function drawBarChart(canvas, rows, options = {}) {
+function setSelectedToFirstVisible() {
+  const visible = filteredCommodities();
+  state.selectedId = visible[0]?.id || data.commodities[0]?.id || null;
+}
+
+function drawChartFrame(ctx, width, height, padding, minValue, maxValue) {
+  const chartHeight = height - padding.top - padding.bottom;
+  ctx.strokeStyle = "#dce5ec";
+  ctx.fillStyle = "#5d6b78";
+  ctx.font = "12px Segoe UI, Arial";
+  ctx.lineWidth = 1;
+
+  for (let i = 0; i <= 4; i += 1) {
+    const y = padding.top + chartHeight - (chartHeight * i) / 4;
+    const value = minValue + ((maxValue - minValue) * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, y);
+    ctx.lineTo(width - padding.right, y);
+    ctx.stroke();
+    ctx.fillText(formatNumber(value), 10, y + 4);
+  }
+}
+
+function setupCanvas(canvas) {
   const ctx = canvas.getContext("2d");
   const width = canvas.clientWidth;
   const height = Number(canvas.getAttribute("height"));
@@ -69,245 +77,190 @@ function drawBarChart(canvas, rows, options = {}) {
   canvas.height = height * dpr;
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, width, height);
+  return { ctx, width, height };
+}
 
-  const padding = { top: 22, right: 28, bottom: options.bottom || 54, left: options.left || 92 };
+function drawComparisonChart(item) {
+  const { ctx, width, height } = setupCanvas(els.comparisonChart);
+  const padding = { top: 24, right: 32, bottom: 48, left: 92 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
-  const maxValue = Math.max(...rows.map((row) => row.value), 1);
+  const values = item.monthly.flatMap((entry) => [entry.reported, entry.adjusted]);
+  const maxValue = Math.max(...values, 1);
 
-  ctx.strokeStyle = "#dce5ec";
-  ctx.lineWidth = 1;
-  ctx.font = "12px Segoe UI, Arial";
-  ctx.fillStyle = "#5d6b78";
-  for (let i = 0; i <= 4; i += 1) {
-    const y = padding.top + chartHeight - (chartHeight * i) / 4;
+  drawChartFrame(ctx, width, height, padding, 0, maxValue);
+
+  function pointFor(entry, index, field) {
+    return {
+      x: padding.left + (chartWidth * index) / Math.max(item.monthly.length - 1, 1),
+      y: padding.top + chartHeight - (entry[field] / maxValue) * chartHeight,
+    };
+  }
+
+  function drawLine(field, color) {
     ctx.beginPath();
-    ctx.moveTo(padding.left, y);
-    ctx.lineTo(width - padding.right, y);
-    ctx.stroke();
-    ctx.fillText(formatNumber((maxValue * i) / 4), 10, y + 4);
-  }
-
-  const barGap = options.horizontal ? 9 : 14;
-  if (options.horizontal) {
-    const barHeight = Math.max(12, (chartHeight - barGap * (rows.length - 1)) / rows.length);
-    rows.forEach((row, index) => {
-      const y = padding.top + index * (barHeight + barGap);
-      const barWidth = (row.value / maxValue) * chartWidth;
-      ctx.fillStyle = row.color || "#0f766e";
-      ctx.fillRect(padding.left, y, barWidth, barHeight);
-      ctx.fillStyle = "#17212b";
-      ctx.font = "12px Segoe UI, Arial";
-      ctx.fillText(row.label.slice(0, 30), 10, y + barHeight - 3);
-      ctx.fillStyle = "#5d6b78";
-      ctx.fillText(formatNumber(row.value), padding.left + barWidth + 6, y + barHeight - 3);
+    item.monthly.forEach((entry, index) => {
+      const point = pointFor(entry, index, field);
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
     });
-    return;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    item.monthly.forEach((entry, index) => {
+      const point = pointFor(entry, index, field);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    });
   }
 
-  const barWidth = Math.max(12, (chartWidth - barGap * (rows.length - 1)) / rows.length);
-  rows.forEach((row, index) => {
-    const x = padding.left + index * (barWidth + barGap);
-    const barHeight = (row.value / maxValue) * chartHeight;
-    const y = padding.top + chartHeight - barHeight;
-    ctx.fillStyle = row.color || "#1d4ed8";
-    ctx.fillRect(x, y, barWidth, barHeight);
+  drawLine("reported", "#1d4ed8");
+  drawLine("adjusted", "#0f766e");
+
+  ctx.fillStyle = "#5d6b78";
+  ctx.textAlign = "center";
+  item.monthly.forEach((entry, index) => {
+    const x = padding.left + (chartWidth * index) / Math.max(item.monthly.length - 1, 1);
+    ctx.fillText(entry.month, x, height - 20);
+  });
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#1d4ed8";
+  ctx.fillRect(width - 190, 18, 12, 12);
+  ctx.fillText("Reported", width - 172, 29);
+  ctx.fillStyle = "#0f766e";
+  ctx.fillRect(width - 105, 18, 12, 12);
+  ctx.fillText("Adjusted", width - 87, 29);
+}
+
+function drawDifferenceChart(item) {
+  const { ctx, width, height } = setupCanvas(els.differenceChart);
+  const padding = { top: 24, right: 28, bottom: 48, left: 92 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const values = item.monthly.map((entry) => entry.difference);
+  const maxAbs = Math.max(...values.map(Math.abs), 1);
+  const minValue = -maxAbs;
+  const maxValue = maxAbs;
+  const zeroY = padding.top + chartHeight - ((0 - minValue) / (maxValue - minValue)) * chartHeight;
+
+  drawChartFrame(ctx, width, height, padding, minValue, maxValue);
+  ctx.strokeStyle = "#17212b";
+  ctx.beginPath();
+  ctx.moveTo(padding.left, zeroY);
+  ctx.lineTo(width - padding.right, zeroY);
+  ctx.stroke();
+
+  const gap = 12;
+  const barWidth = Math.max(14, (chartWidth - gap * (item.monthly.length - 1)) / item.monthly.length);
+  item.monthly.forEach((entry, index) => {
+    const x = padding.left + index * (barWidth + gap);
+    const y = padding.top + chartHeight - ((entry.difference - minValue) / (maxValue - minValue)) * chartHeight;
+    const barTop = Math.min(y, zeroY);
+    const barHeight = Math.abs(zeroY - y);
+    ctx.fillStyle = entry.difference >= 0 ? "#0f766e" : "#b91c1c";
+    ctx.fillRect(x, barTop, barWidth, Math.max(1, barHeight));
     ctx.save();
-    ctx.translate(x + barWidth / 2, height - 18);
+    ctx.translate(x + barWidth / 2, height - 20);
     ctx.rotate(-Math.PI / 5);
     ctx.fillStyle = "#5d6b78";
     ctx.textAlign = "right";
-    ctx.fillText(row.label, 0, 0);
+    ctx.fillText(entry.month, 0, 0);
     ctx.restore();
   });
 }
 
-function drawLineChart(canvas, rows) {
-  const ctx = canvas.getContext("2d");
-  const width = canvas.clientWidth;
-  const height = Number(canvas.getAttribute("height"));
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = width * dpr;
-  canvas.height = height * dpr;
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, width, height);
+function renderOptions() {
+  const visible = filteredCommodities();
+  const selectedStillVisible = visible.some((item) => item.id === Number(state.selectedId));
+  if (!selectedStillVisible) setSelectedToFirstVisible();
 
-  const padding = { top: 24, right: 30, bottom: 42, left: 86 };
-  const chartWidth = width - padding.left - padding.right;
-  const chartHeight = height - padding.top - padding.bottom;
-  const maxValue = Math.max(...rows.map((row) => row.value), 1);
-
-  ctx.strokeStyle = "#dce5ec";
-  ctx.fillStyle = "#5d6b78";
-  ctx.font = "12px Segoe UI, Arial";
-  for (let i = 0; i <= 4; i += 1) {
-    const y = padding.top + chartHeight - (chartHeight * i) / 4;
-    ctx.beginPath();
-    ctx.moveTo(padding.left, y);
-    ctx.lineTo(width - padding.right, y);
-    ctx.stroke();
-    ctx.fillText(formatNumber((maxValue * i) / 4), 10, y + 4);
-  }
-
-  const points = rows.map((row, index) => ({
-    x: padding.left + (chartWidth * index) / Math.max(rows.length - 1, 1),
-    y: padding.top + chartHeight - (row.value / maxValue) * chartHeight,
-    label: row.month,
-    value: row.value,
-  }));
-
-  ctx.beginPath();
-  points.forEach((point, index) => {
-    if (index === 0) ctx.moveTo(point.x, point.y);
-    else ctx.lineTo(point.x, point.y);
-  });
-  ctx.strokeStyle = "#0f766e";
-  ctx.lineWidth = 3;
-  ctx.stroke();
-
-  points.forEach((point) => {
-    ctx.fillStyle = "#0f766e";
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#5d6b78";
-    ctx.textAlign = "center";
-    ctx.fillText(point.label, point.x, height - 18);
-  });
-  ctx.textAlign = "left";
+  els.commoditySelect.innerHTML = visible
+    .map((item) => `<option value="${item.id}" ${item.id === Number(state.selectedId) ? "selected" : ""}>${optionLabel(item)}</option>`)
+    .join("");
 }
 
-function drawAbcChart(canvas, items) {
-  const colors = { A: "#0f766e", B: "#1d4ed8", C: "#b7791f" };
-  const totals = ["A", "B", "C"].map((abc) => ({
-    label: `Class ${abc}`,
-    value: items.filter((item) => item.abcClass === abc).reduce((sum, item) => sum + item.total, 0),
-    color: colors[abc],
-  }));
-  drawBarChart(canvas, totals, { left: 86, bottom: 54 });
+function renderKpis(item) {
+  els.kpiReported.textContent = formatNumber(item.totalReported);
+  els.kpiAdjusted.textContent = formatNumber(item.totalAdjusted);
+  els.kpiAverage.textContent = formatNumber(item.averageAdjusted);
+  els.kpiHighest.textContent = `${item.highestMonth} (${formatNumber(item.highestValue)})`;
+  els.kpiLowest.textContent = `${item.lowestMonth} (${formatNumber(item.lowestValue)})`;
 }
 
-function updateKpis(items) {
-  const total = items.reduce((sum, item) => sum + item.total, 0);
-  const monthly = total / 12;
-  const monthlyRows = monthTotals(items);
-  const peak = monthlyRows.reduce((best, row) => (row.value > best.value ? row : best), monthlyRows[0]);
-
-  els.kpiTotal.textContent = formatNumber(total);
-  els.kpiCommodities.textContent = formatNumber(items.length);
-  els.kpiMonthly.textContent = formatNumber(monthly);
-  els.kpiPeak.textContent = peak ? `${peak.month} (${formatNumber(peak.value)})` : "-";
-  els.trendNote.textContent = `${formatNumber(total)} units across selected commodities`;
+function renderProduct(item) {
+  els.productName.textContent = item.product;
+  els.packSize.textContent = item.packSize;
+  els.pairStatus.textContent = item.hasAdjustedRow ? "Adjusted consumption row found" : "No adjusted row found; adjusted values are zero";
 }
 
-function updateTable(items) {
-  const visible = items.slice(0, 150);
-  els.table.innerHTML = visible
+function renderTable(item) {
+  els.monthlyTable.innerHTML = item.monthly
     .map(
-      (item) => `
+      (entry) => `
         <tr>
-          <td class="num">${item.rank}</td>
-          <td>${item.product}</td>
-          <td>${item.packSize}</td>
-          <td><span class="abc abc-${item.abcClass.toLowerCase()}">${item.abcClass}</span></td>
-          <td class="num">${formatNumber(item.total)}</td>
-          <td class="num">${formatNumber(item.averageMonthly)}</td>
-          <td class="num">${item.activeMonths}</td>
-          <td>${item.peakMonth}</td>
-          <td class="num">${formatNumber(item.peakValue)}</td>
+          <td>${entry.month} 2025</td>
+          <td class="num">${formatNumber(entry.reported)}</td>
+          <td class="num">${formatNumber(entry.adjusted)}</td>
+          <td class="num ${entry.difference < 0 ? "negative" : entry.difference > 0 ? "positive" : ""}">${formatNumber(entry.difference)}</td>
         </tr>
       `,
     )
     .join("");
-  els.tableNote.textContent = `Showing ${formatNumber(visible.length)} of ${formatNumber(items.length)} filtered commodities`;
-}
-
-function updateCharts(items) {
-  drawLineChart(els.monthlyChart, monthTotals(items));
-  const topRows = items.slice(0, 10).map((item) => ({
-    label: item.product,
-    value: item.total,
-    color: item.abcClass === "A" ? "#0f766e" : item.abcClass === "B" ? "#1d4ed8" : "#b7791f",
-  }));
-  drawBarChart(els.topChart, topRows, { horizontal: true, left: 170, bottom: 20 });
-  drawAbcChart(els.abcChart, items);
+  els.tableNote.textContent = `Difference = adjusted minus reported for ${item.product}`;
 }
 
 function render() {
-  const items = filteredData();
-  updateKpis(items);
-  updateCharts(items);
-  updateTable(items);
-}
-
-function setupFilters() {
-  const packs = [...new Set(data.commodities.map((item) => item.packSize))].sort((a, b) => a.localeCompare(b));
-  els.packFilter.innerHTML = `<option value="all">All pack sizes</option>${packs
-    .map((pack) => `<option value="${pack}">${pack}</option>`)
-    .join("")}`;
-
-  els.searchInput.addEventListener("input", (event) => {
-    state.search = event.target.value;
-    render();
-  });
-  els.packFilter.addEventListener("change", (event) => {
-    state.pack = event.target.value;
-    render();
-  });
-  els.abcFilter.addEventListener("change", (event) => {
-    state.abc = event.target.value;
-    render();
-  });
-  els.bandFilter.addEventListener("change", (event) => {
-    state.band = event.target.value;
-    render();
-  });
-  els.resetButton.addEventListener("click", () => {
-    state.search = "";
-    state.pack = "all";
-    state.abc = "all";
-    state.band = "all";
-    els.searchInput.value = "";
-    els.packFilter.value = "all";
-    els.abcFilter.value = "all";
-    els.bandFilter.value = "all";
-    render();
-  });
+  renderOptions();
+  const item = selectedCommodity();
+  if (!item) return;
+  renderProduct(item);
+  renderKpis(item);
+  renderTable(item);
+  drawComparisonChart(item);
+  drawDifferenceChart(item);
 }
 
 function downloadCsv() {
-  const rows = filteredData();
-  const headers = ["Rank", "Commodity", "Pack Size", "ABC Class", "Annual Total", "Average Monthly", "Active Months", "Peak Month", "Peak Quantity"];
-  const body = rows.map((item) => [
-    item.rank,
-    item.product,
-    item.packSize,
-    item.abcClass,
-    item.total,
-    item.averageMonthly,
-    item.activeMonths,
-    item.peakMonth,
-    item.peakValue,
-  ]);
-  const csv = [headers, ...body]
+  const item = selectedCommodity();
+  const headers = ["Product", "Pack Size", "Month", "Reported Consumption", "Adjusted Consumption", "Difference"];
+  const rows = item.monthly.map((entry) => [item.product, item.packSize, `${entry.month} 2025`, entry.reported, entry.adjusted, entry.difference]);
+  const csv = [headers, ...rows]
     .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
     .join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = "nsccu-commodity-output.csv";
+  link.download = "commodity-reported-adjusted-consumption.csv";
   link.click();
   URL.revokeObjectURL(link.href);
 }
 
 function init() {
   els.sourceFile.textContent = data.source.fileName;
-  els.qualityNote.textContent = `${formatNumber(data.source.rawRows)} source rows were read from ${data.source.sheet}; ${formatNumber(
-    data.source.namedCommodityRows,
-  )} rows had named commodities and were aggregated into ${formatNumber(
-    data.source.aggregatedCommodities,
-  )} commodity-pack records. ${formatNumber(data.source.blankProductRows)} blank commodity-description rows were excluded from aggregation.`;
-  setupFilters();
+  els.qualityNote.textContent = `${formatNumber(data.source.rawRows)} Excel rows were read from ${data.source.sheet}. ${formatNumber(
+    data.source.reportedCommodityRows,
+  )} named product rows were loaded as reported consumption. ${formatNumber(
+    data.source.adjustedPairs,
+  )} products had a blank row immediately after them and that row was used as adjusted consumption. Missing monthly cells are treated as zero.`;
+
+  els.searchInput.addEventListener("input", (event) => {
+    state.search = event.target.value;
+    render();
+  });
+  els.commoditySelect.addEventListener("change", (event) => {
+    state.selectedId = Number(event.target.value);
+    render();
+  });
+  els.resetButton.addEventListener("click", () => {
+    state.search = "";
+    els.searchInput.value = "";
+    state.selectedId = data.commodities[0]?.id || null;
+    render();
+  });
   els.downloadButton.addEventListener("click", downloadCsv);
   window.addEventListener("resize", render);
   render();

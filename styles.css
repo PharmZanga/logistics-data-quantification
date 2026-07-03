@@ -98,6 +98,7 @@ h1 {
 .source-chip span,
 .panel-heading span,
 .filters span,
+.selected-product span,
 .kpis span {
   display: block;
   color: var(--muted);
@@ -126,6 +127,7 @@ main {
 }
 
 .filters,
+.selected-product,
 .kpis,
 .chart-panel,
 .table-section,
@@ -137,7 +139,7 @@ main {
 
 .filters {
   display: grid;
-  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(150px, 1fr)) auto;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, 2fr) auto;
   gap: 14px;
   align-items: end;
   padding: 16px;
@@ -177,10 +179,34 @@ button:hover {
   color: var(--teal);
 }
 
+.selected-product {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 2fr minmax(140px, 0.7fr) minmax(220px, 1fr);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.selected-product div {
+  padding: 18px 20px;
+  border-right: 1px solid var(--line);
+}
+
+.selected-product div:last-child {
+  border-right: 0;
+}
+
+.selected-product strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
 .kpis {
   margin-top: 18px;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -204,7 +230,7 @@ button:hover {
 .layout {
   margin-top: 18px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 18px;
 }
 
@@ -253,7 +279,7 @@ canvas {
 
 table {
   width: 100%;
-  min-width: 960px;
+  min-width: 680px;
   border-collapse: collapse;
   background: #fff;
 }
@@ -307,6 +333,16 @@ th.num {
   color: #8a580e;
 }
 
+.positive {
+  color: #0f766e;
+  font-weight: 700;
+}
+
+.negative {
+  color: var(--red);
+  font-weight: 700;
+}
+
 .data-quality {
   margin-top: 18px;
 }
@@ -327,9 +363,19 @@ th.num {
   }
 
   .filters,
+  .selected-product,
   .kpis,
   .layout {
     grid-template-columns: 1fr;
+  }
+
+  .selected-product div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .selected-product div:last-child {
+    border-bottom: 0;
   }
 
   .kpis article {
