@@ -174,8 +174,7 @@ function renderProduct(item) {
   els.pairStatus.textContent = data.source.period;
 }
 
-function renderWideTable() {
-  const rows = filteredCommodities();
+function renderWideTable(item) {
   els.tableHead.innerHTML = `
     <tr>
       <th>Product Description</th>
@@ -184,26 +183,15 @@ function renderWideTable() {
     </tr>
   `;
 
-  els.monthlyTable.innerHTML = rows
-    .map(
-      (item) => `
-        <tr class="${item.id === Number(state.selectedId) ? "selected-row" : ""}" data-id="${item.id}">
-          <td>${item.product}</td>
-          <td>${item.packSize}</td>
-          ${item.values.map((value) => `<td class="num">${formatNumber(value)}</td>`).join("")}
-        </tr>
-      `,
-    )
-    .join("");
+  els.monthlyTable.innerHTML = `
+    <tr class="selected-row" data-id="${item.id}">
+      <td>${item.product}</td>
+      <td>${item.packSize}</td>
+      ${item.values.map((value) => `<td class="num">${formatNumber(value)}</td>`).join("")}
+    </tr>
+  `;
 
-  els.monthlyTable.querySelectorAll("tr").forEach((row) => {
-    row.addEventListener("click", () => {
-      state.selectedId = Number(row.dataset.id);
-      render();
-    });
-  });
-
-  els.tableNote.textContent = `Showing ${formatNumber(rows.length)} commodity rows in the same wide format as the Excel sheet`;
+  els.tableNote.textContent = `Showing selected commodity only: ${item.product}`;
 }
 
 function render() {
@@ -212,15 +200,15 @@ function render() {
   if (!item) return;
   renderProduct(item);
   renderKpis(item);
-  renderWideTable();
+  renderWideTable(item);
   drawConsumptionTrend(item);
   drawAnnualChart(item);
 }
 
 function downloadCsv() {
-  const rows = filteredCommodities();
+  const item = selectedCommodity();
   const headers = ["Product Description", "Pack Size", ...data.months];
-  const body = rows.map((item) => [item.product, item.packSize, ...item.values]);
+  const body = [[item.product, item.packSize, ...item.values]];
   const csv = [headers, ...body]
     .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
     .join("\n");

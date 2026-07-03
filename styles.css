@@ -185,9 +185,12 @@ h1 {
   grid-template-columns: minmax(230px, 0.85fr) minmax(210px, 0.9fr) minmax(320px, 1.6fr) auto;
   gap: 12px;
   align-items: end;
-  padding: 14px 24px;
+  padding: 14px 20px;
   background: #ffffff;
-  border-bottom: 1px solid var(--line);
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 7px 7px;
+  box-shadow: 0 12px 32px rgba(10, 42, 30, 0.06);
 }
 
 .breadcrumb {
@@ -252,8 +255,8 @@ button:hover {
 .hero {
   position: relative;
   min-height: 336px;
-  margin-top: 0;
-  border-radius: 0 0 7px 7px;
+  margin-top: 16px;
+  border-radius: 7px;
   overflow: hidden;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
