@@ -18,6 +18,10 @@ const els = {
   kpiLowest: document.getElementById("kpiLowest"),
   comparisonChart: document.getElementById("comparisonChart"),
   differenceChart: document.getElementById("differenceChart"),
+  comparisonTitle: document.getElementById("comparisonTitle"),
+  comparisonSubtitle: document.getElementById("comparisonSubtitle"),
+  annualTitle: document.getElementById("annualTitle"),
+  annualSubtitle: document.getElementById("annualSubtitle"),
   monthlyTable: document.getElementById("monthlyTable"),
   tableHead: document.getElementById("tableHead"),
   tableNote: document.getElementById("tableNote"),
@@ -83,6 +87,46 @@ function drawConsumptionTrend(item) {
   const padding = { top: 24, right: 32, bottom: 64, left: 92 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
+  if (item.forecastOnly) {
+    const rows = forecastRows(item);
+    const maxValue = Math.max(...rows.map((row) => row.value), 1);
+    drawFrame(ctx, width, height, padding, maxValue);
+
+    const points = rows.map((row, index) => ({
+      x: padding.left + (chartWidth * index) / Math.max(rows.length - 1, 1),
+      y: padding.top + chartHeight - (row.value / maxValue) * chartHeight,
+      year: row.year,
+      value: row.value,
+    }));
+
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.strokeStyle = "#0f766e";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    points.forEach((point) => {
+      ctx.fillStyle = "#0f766e";
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#5d6b78";
+      ctx.textAlign = "center";
+      ctx.fillText(formatNumber(point.value), point.x, point.y - 10);
+      ctx.fillStyle = "#17212b";
+      ctx.fillText(point.year, point.x, height - 22);
+    });
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#0f766e";
+    ctx.fillRect(width - 190, 18, 12, 12);
+    ctx.fillText("Forecast quantity", width - 172, 29);
+    return;
+  }
+
   const consumptionValues = item.values.filter((value) => value !== null && value !== undefined);
   const adjustedOnly = item.adjustedValues.filter((value) => value !== null && value !== undefined);
   const maxValue = Math.max(...consumptionValues, ...adjustedOnly, 1);
@@ -154,7 +198,7 @@ function drawAnnualChart(item) {
   const chartHeight = height - padding.top - padding.bottom;
   let rows = [];
   if (item.forecastOnly && item.forecastByYear) {
-    rows = Object.entries(item.forecastByYear).map(([year, value]) => ({ year, value }));
+    rows = forecastRows(item);
   } else {
     const annual = {};
     item.monthly.forEach((entry) => {
@@ -195,11 +239,25 @@ function renderOptions() {
 }
 
 function renderKpis(item) {
-  els.kpiReported.textContent = item.forecastOnly ? "-" : formatNumber(item.total);
+  if (item.forecastOnly) {
+    const rows = forecastRows(item);
+    const total = rows.reduce((sum, row) => sum + row.value, 0);
+    const average = rows.length ? total / rows.length : 0;
+    const highest = rows.reduce((best, row) => (row.value > best.value ? row : best), rows[0] || { year: "-", value: 0 });
+    const lowest = rows.reduce((best, row) => (row.value < best.value ? row : best), rows[0] || { year: "-", value: 0 });
+    els.kpiReported.textContent = formatNumber(total);
+    els.kpiAdjusted.textContent = "-";
+    els.kpiAverage.textContent = formatNumber(average);
+    els.kpiHighest.textContent = `${highest.year} (${formatNumber(highest.value)})`;
+    els.kpiLowest.textContent = `${lowest.year} (${formatNumber(lowest.value)})`;
+    return;
+  }
+
+  els.kpiReported.textContent = formatNumber(item.total);
   els.kpiAdjusted.textContent = item.hasAdjusted2025 ? formatNumber(item.adjusted2025Total) : "-";
-  els.kpiAverage.textContent = item.forecastOnly ? "-" : formatNumber(item.averageMonthly);
-  els.kpiHighest.textContent = item.forecastOnly ? "-" : `${item.highestMonth} (${formatNumber(item.highestValue)})`;
-  els.kpiLowest.textContent = item.forecastOnly ? "-" : `${item.lowestMonth} (${formatNumber(item.lowestValue)})`;
+  els.kpiAverage.textContent = formatNumber(item.averageMonthly);
+  els.kpiHighest.textContent = `${item.highestMonth} (${formatNumber(item.highestValue)})`;
+  els.kpiLowest.textContent = `${item.lowestMonth} (${formatNumber(item.lowestValue)})`;
 }
 
 function renderProduct(item) {
@@ -218,7 +276,37 @@ function valueClass(value) {
   return value > 0 ? "positive" : "negative";
 }
 
+function forecastRows(item) {
+  return Object.entries(item.forecastByYear || {})
+    .map(([year, value]) => ({ year, value }))
+    .sort((a, b) => Number(a.year) - Number(b.year));
+}
+
 function renderWideTable(item) {
+  if (item.forecastOnly) {
+    const rows = forecastRows(item);
+    els.tableHead.innerHTML = `
+      <tr>
+        <th>Product Description</th>
+        <th>Pack Size</th>
+        <th>Data Type</th>
+        ${rows.map((row) => `<th class="num">${row.year}</th>`).join("")}
+      </tr>
+    `;
+
+    els.monthlyTable.innerHTML = `
+      <tr class="selected-row" data-id="${item.id}">
+        <td>${item.product}</td>
+        <td>${item.packSize}</td>
+        <td>Forecast Quantity</td>
+        ${rows.map((row) => `<td class="num">${formatNumber(row.value)}</td>`).join("")}
+      </tr>
+    `;
+
+    els.tableNote.textContent = `Showing selected forecast-only commodity: ${item.product}. These are annual forecast quantities from 2023 to 2026.`;
+    return;
+  }
+
   els.tableHead.innerHTML = `
     <tr>
       <th>Product Description</th>
@@ -258,6 +346,10 @@ function render() {
   renderOptions();
   const item = selectedCommodity();
   if (!item) return;
+  if (els.comparisonTitle) els.comparisonTitle.textContent = item.forecastOnly ? "Annual Forecast Trend" : "Consumption vs Adjusted Consumption";
+  if (els.comparisonSubtitle) els.comparisonSubtitle.textContent = item.forecastOnly ? "Forecast quantities from consolidation workbook" : "Adjusted values available for 2025";
+  if (els.annualTitle) els.annualTitle.textContent = item.forecastOnly ? "Annual Forecast Summary" : "Annual Consumption Summary";
+  if (els.annualSubtitle) els.annualSubtitle.textContent = item.forecastOnly ? "Forecast totals by year" : "Consumption totals by year";
   renderProduct(item);
   renderKpis(item);
   renderWideTable(item);
@@ -267,19 +359,22 @@ function render() {
 
 function downloadCsv() {
   const item = selectedCommodity();
-  const headers = ["Product Description", "Pack Size", "Data Type", ...data.months];
-  const body = [
-    [item.product, item.packSize, "Consumption", ...item.values],
-    [item.product, item.packSize, "Adjusted Consumption", ...item.adjustedValues.map((value) => value ?? "")],
-    [item.product, item.packSize, "Difference", ...item.differenceValues.map((value) => value ?? "")],
-  ];
+  const rows = forecastRows(item);
+  const headers = item.forecastOnly ? ["Product Description", "Pack Size", "Data Type", ...rows.map((row) => row.year)] : ["Product Description", "Pack Size", "Data Type", ...data.months];
+  const body = item.forecastOnly
+    ? [[item.product, item.packSize, "Forecast Quantity", ...rows.map((row) => row.value)]]
+    : [
+        [item.product, item.packSize, "Consumption", ...item.values],
+        [item.product, item.packSize, "Adjusted Consumption", ...item.adjustedValues.map((value) => value ?? "")],
+        [item.product, item.packSize, "Difference", ...item.differenceValues.map((value) => value ?? "")],
+      ];
   const csv = [headers, ...body]
     .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
     .join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = "em-consumption-adjusted-difference.csv";
+  link.download = item.forecastOnly ? "forecast-commodity-output.csv" : "em-consumption-adjusted-difference.csv";
   link.click();
   URL.revokeObjectURL(link.href);
 }
