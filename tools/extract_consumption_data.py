@@ -7,9 +7,11 @@ import pandas as pd
 
 SOURCE = Path(r"C:\Users\Zanga Musakuzi\Downloads\EM CONSUMPTION DATA2024 TO 2026.xlsx")
 ADJUSTED_SOURCE = Path(r"C:\Users\Zanga Musakuzi\Desktop\adjusted data EM 2025 consumption data.xlsx")
+FORECAST_SOURCE = Path(r"C:\Users\Zanga Musakuzi\Desktop\quantification 2026\FORECAST CONSOLIDATION FP 2023-2026.xlsx")
 OUTPUT = Path(__file__).resolve().parents[1] / "data" / "dashboard-data.js"
 SHEET_NAME = "CONSUMPTION DATA"
 ADJUSTED_SHEET_NAME = "Sheet1"
+FORECAST_SHEET_NAME = "Sheet1"
 ADJUSTED_MONTHS = [
     ("JAN", "Jan 2025"),
     ("FEB", "Feb 2025"),
@@ -57,7 +59,14 @@ def commodity_key(product, pack_size):
     return f"{clean_text(product).lower()}||{clean_text(pack_size).lower()}"
 
 
+def product_key(product):
+    return clean_text(product).lower()
+
+
 def load_adjusted_2025():
+    if not ADJUSTED_SOURCE.exists():
+        return {}, 0
+
     adjusted_df = pd.read_excel(ADJUSTED_SOURCE, sheet_name=ADJUSTED_SHEET_NAME)
     adjusted_map = {}
     adjusted_pairs = 0
@@ -88,6 +97,47 @@ def load_adjusted_2025():
     return adjusted_map, adjusted_pairs
 
 
+def load_forecast_commodities():
+    if not FORECAST_SOURCE.exists():
+        return [], 0
+
+    forecast_df = pd.read_excel(FORECAST_SOURCE, sheet_name=FORECAST_SHEET_NAME, header=1)
+    forecast_df.columns = [clean_text(column) for column in forecast_df.columns]
+    forecast_items = {}
+    usable_rows = 0
+
+    for row_index, row in forecast_df.iterrows():
+        fallback_name = clean_text(row.get("PRODUCTS NAME BY FQ"))
+        catalogue_name = clean_text(row.get("PRODUCTS NAME BY ZAMMSA CATALOGUE"))
+        product = catalogue_name or fallback_name
+        if not product:
+            continue
+
+        year = pd.to_numeric(row.get("FORECASTED FOR YEAR"), errors="coerce")
+        quantity = pd.to_numeric(row.get("FINAL AGREED FORECAST QTY"), errors="coerce")
+        if pd.isna(year):
+            continue
+
+        usable_rows += 1
+        pack_size = clean_text(row.get("FORCAST IN CATALOGUE PACK SIZE")) or clean_text(row.get("UNIT")) or "Not specified"
+        key = commodity_key(product, pack_size)
+        if key not in forecast_items:
+            forecast_items[key] = {
+                "sourceRow": int(row_index) + 3,
+                "product": product,
+                "packSize": pack_size,
+                "forecastOnly": True,
+                "forecastByYear": {},
+                "forecastSourceName": fallback_name,
+                "sku": clean_text(row.get("SKU")),
+            }
+
+        if not pd.isna(quantity):
+            forecast_items[key]["forecastByYear"][str(int(year))] = int(round(float(quantity)))
+
+    return list(forecast_items.values()), usable_rows
+
+
 def load_existing_consumption_payload():
     if not OUTPUT.exists():
         return None
@@ -100,6 +150,7 @@ def load_existing_consumption_payload():
 
 def main():
     adjusted_map, adjusted_pairs = load_adjusted_2025()
+    forecast_items, forecast_rows = load_forecast_commodities()
     existing_payload = None
 
     if SOURCE.exists():
@@ -145,11 +196,30 @@ def main():
                 "product": item["product"],
                 "packSize": item["packSize"],
                 "values": item["values"],
+                "adjustedValues": item.get("adjustedValues", []),
+                "differenceValues": item.get("differenceValues", []),
+                "hasAdjusted2025": item.get("hasAdjusted2025", False),
+                "forecastOnly": item.get("forecastOnly", False),
+                "forecastByYear": item.get("forecastByYear", {}),
+                "forecastSourceName": item.get("forecastSourceName", ""),
+                "sku": item.get("sku", ""),
             }
             for index, item in enumerate(existing_payload["commodities"])
         ]
         file_name = existing_payload["source"].get("fileName", SOURCE.name)
         generated_from = existing_payload["source"].get("generatedFrom", str(SOURCE))
+        if not adjusted_map:
+            adjusted_pairs = existing_payload["source"].get("adjustedPairs2025", 0)
+
+    existing_product_keys = {product_key(item["product"]) for item in source_rows}
+    forecast_added = 0
+    for forecast_item in forecast_items:
+        if product_key(forecast_item["product"]) in existing_product_keys:
+            continue
+        forecast_item["values"] = [None for _ in months]
+        source_rows.append(forecast_item)
+        existing_product_keys.add(product_key(forecast_item["product"]))
+        forecast_added += 1
 
     commodities = []
     for source_item in source_rows:
@@ -157,12 +227,28 @@ def main():
         pack_size = source_item["packSize"]
         values = source_item["values"]
         adjusted_by_month = adjusted_map.get(commodity_key(product, pack_size), {})
-        adjusted_values = []
-        difference_values = []
-        for month, value in zip(months, values):
-            adjusted_value = adjusted_by_month.get(month["label"])
-            adjusted_values.append(adjusted_value)
-            difference_values.append(adjusted_value - value if adjusted_value is not None else None)
+        stored_adjusted_values = source_item.get("adjustedValues", [])
+        stored_difference_values = source_item.get("differenceValues", [])
+        if adjusted_by_month:
+            adjusted_values = []
+            difference_values = []
+            for month, value in zip(months, values):
+                adjusted_value = adjusted_by_month.get(month["label"])
+                adjusted_values.append(adjusted_value)
+                difference_values.append(adjusted_value - value if adjusted_value is not None and value is not None else None)
+        elif len(stored_adjusted_values) == len(values):
+            adjusted_values = stored_adjusted_values
+            difference_values = (
+                stored_difference_values
+                if len(stored_difference_values) == len(values)
+                else [
+                    adjusted_value - value if adjusted_value is not None and value is not None else None
+                    for adjusted_value, value in zip(adjusted_values, values)
+                ]
+            )
+        else:
+            adjusted_values = [None for _ in values]
+            difference_values = [None for _ in values]
 
         monthly = [
             {
@@ -173,9 +259,10 @@ def main():
             }
             for index, value in enumerate(values)
         ]
-        total = int(sum(values))
-        highest_index = max(range(len(values)), key=lambda index: values[index]) if values else 0
-        lowest_index = min(range(len(values)), key=lambda index: values[index]) if values else 0
+        numeric_values = [0 if value is None else value for value in values]
+        total = int(sum(numeric_values))
+        highest_index = max(range(len(numeric_values)), key=lambda index: numeric_values[index]) if numeric_values else 0
+        lowest_index = min(range(len(numeric_values)), key=lambda index: numeric_values[index]) if numeric_values else 0
 
         commodities.append(
             {
@@ -186,17 +273,21 @@ def main():
                 "values": values,
                 "adjustedValues": adjusted_values,
                 "differenceValues": difference_values,
-                "hasAdjusted2025": bool(adjusted_by_month),
+                "hasAdjusted2025": bool(adjusted_by_month) or bool(source_item.get("hasAdjusted2025", False)),
+                "forecastOnly": bool(source_item.get("forecastOnly", False)),
+                "forecastByYear": source_item.get("forecastByYear", {}),
+                "forecastSourceName": source_item.get("forecastSourceName", ""),
+                "sku": source_item.get("sku", ""),
                 "monthly": monthly,
                 "total": total,
                 "adjusted2025Total": int(sum(value for value in adjusted_values if value is not None)),
                 "difference2025Total": int(sum(value for value in difference_values if value is not None)),
-                "averageMonthly": round(total / len(values), 1) if values else 0,
-                "activeMonths": int(sum(1 for value in values if value > 0)),
+                "averageMonthly": round(total / len(numeric_values), 1) if numeric_values else 0,
+                "activeMonths": int(sum(1 for value in numeric_values if value > 0)),
                 "highestMonth": months[highest_index]["label"] if values else "",
-                "highestValue": values[highest_index] if values else 0,
+                "highestValue": numeric_values[highest_index] if numeric_values else 0,
                 "lowestMonth": months[lowest_index]["label"] if values else "",
-                "lowestValue": values[lowest_index] if values else 0,
+                "lowestValue": numeric_values[lowest_index] if numeric_values else 0,
             }
         )
 
@@ -205,7 +296,7 @@ def main():
         totals_by_month.append(
             {
                 "month": month["label"],
-                "value": int(sum(item["values"][index] for item in commodities)),
+                "value": int(sum((item["values"][index] or 0) for item in commodities)),
             }
         )
 
@@ -219,10 +310,15 @@ def main():
             "adjustedFileName": ADJUSTED_SOURCE.name,
             "adjustedPairs2025": adjusted_pairs,
             "adjustedMatchedCommodityRows": int(sum(1 for item in commodities if item["hasAdjusted2025"])),
+            "forecastFileName": FORECAST_SOURCE.name if FORECAST_SOURCE.exists() else "",
+            "forecastRows": forecast_rows,
+            "forecastOnlyCommodityRows": forecast_added,
             "generatedFrom": generated_from,
             "adjustedGeneratedFrom": str(ADJUSTED_SOURCE),
+            "forecastGeneratedFrom": str(FORECAST_SOURCE) if FORECAST_SOURCE.exists() else "",
             "period": f"{months[0]['label']} to {months[-1]['label']}" if months else "",
             "adjustedPeriod": "Jan 2025 to Dec 2025",
+            "forecastPeriod": "2023 to 2026" if forecast_rows else "",
         },
         "months": [month["label"] for month in months],
         "totalsByMonth": totals_by_month,
@@ -238,6 +334,7 @@ def main():
     )
     print(f"Wrote {OUTPUT}")
     print(f"Commodity rows: {len(commodities):,}")
+    print(f"Forecast-only rows added: {forecast_added:,}")
     print(f"Period: {payload['source']['period']}")
 
 

@@ -83,8 +83,9 @@ function drawConsumptionTrend(item) {
   const padding = { top: 24, right: 32, bottom: 64, left: 92 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
+  const consumptionValues = item.values.filter((value) => value !== null && value !== undefined);
   const adjustedOnly = item.adjustedValues.filter((value) => value !== null && value !== undefined);
-  const maxValue = Math.max(...item.values, ...adjustedOnly, 1);
+  const maxValue = Math.max(...consumptionValues, ...adjustedOnly, 1);
 
   drawFrame(ctx, width, height, padding, maxValue);
 
@@ -151,12 +152,17 @@ function drawAnnualChart(item) {
   const padding = { top: 24, right: 30, bottom: 44, left: 92 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
-  const annual = {};
-  item.monthly.forEach((entry) => {
-    const year = entry.month.split(" ")[1] || "";
-    annual[year] = (annual[year] || 0) + entry.value;
-  });
-  const rows = Object.entries(annual).map(([year, value]) => ({ year, value }));
+  let rows = [];
+  if (item.forecastOnly && item.forecastByYear) {
+    rows = Object.entries(item.forecastByYear).map(([year, value]) => ({ year, value }));
+  } else {
+    const annual = {};
+    item.monthly.forEach((entry) => {
+      const year = entry.month.split(" ")[1] || "";
+      annual[year] = (annual[year] || 0) + (entry.value || 0);
+    });
+    rows = Object.entries(annual).map(([year, value]) => ({ year, value }));
+  }
   const maxValue = Math.max(...rows.map((row) => row.value), 1);
 
   drawFrame(ctx, width, height, padding, maxValue);
@@ -189,16 +195,21 @@ function renderOptions() {
 }
 
 function renderKpis(item) {
-  els.kpiReported.textContent = formatNumber(item.total);
+  els.kpiReported.textContent = item.forecastOnly ? "-" : formatNumber(item.total);
   els.kpiAdjusted.textContent = item.hasAdjusted2025 ? formatNumber(item.adjusted2025Total) : "-";
-  els.kpiAverage.textContent = formatNumber(item.averageMonthly);
-  els.kpiHighest.textContent = `${item.highestMonth} (${formatNumber(item.highestValue)})`;
-  els.kpiLowest.textContent = `${item.lowestMonth} (${formatNumber(item.lowestValue)})`;
+  els.kpiAverage.textContent = item.forecastOnly ? "-" : formatNumber(item.averageMonthly);
+  els.kpiHighest.textContent = item.forecastOnly ? "-" : `${item.highestMonth} (${formatNumber(item.highestValue)})`;
+  els.kpiLowest.textContent = item.forecastOnly ? "-" : `${item.lowestMonth} (${formatNumber(item.lowestValue)})`;
 }
 
 function renderProduct(item) {
   els.productName.textContent = item.product;
   els.packSize.textContent = item.packSize;
+  if (item.forecastOnly) {
+    const sku = item.sku ? ` SKU ${item.sku}.` : "";
+    els.pairStatus.textContent = `Forecast-only commodity added from the 2023-2026 consolidation workbook.${sku}`;
+    return;
+  }
   els.pairStatus.textContent = item.hasAdjusted2025 ? "2025 adjusted data matched" : "No 2025 adjusted row matched";
 }
 
@@ -238,7 +249,9 @@ function renderWideTable(item) {
     </tr>
   `;
 
-  els.tableNote.textContent = `Showing selected commodity only: ${item.product}`;
+  els.tableNote.textContent = item.forecastOnly
+    ? `Showing selected forecast-only commodity: ${item.product}. Monthly consumption will remain blank until a consumption workbook is uploaded.`
+    : `Showing selected commodity only: ${item.product}`;
 }
 
 function render() {
@@ -272,11 +285,14 @@ function downloadCsv() {
 }
 
 function init() {
+  const forecastNote = data.source.forecastOnlyCommodityRows
+    ? ` ${formatNumber(data.source.forecastOnlyCommodityRows)} forecast-only commodities were added from ${data.source.forecastFileName}.`
+    : "";
   els.qualityNote.textContent = `${formatNumber(data.source.rawRows)} Excel rows were read from ${data.source.sheet}. ${formatNumber(
     data.source.commodityRows,
   )} commodity rows are shown from ${data.source.period}. 2025 adjusted consumption is matched from ${data.source.adjustedFileName}; ${formatNumber(
     data.source.adjustedMatchedCommodityRows,
-  )} selected consumption rows have a matching adjusted row. Adjusted cells outside 2025 show as unavailable until those files are uploaded.`;
+  )} selected consumption rows have a matching adjusted row.${forecastNote} Adjusted cells outside 2025 show as unavailable until those files are uploaded.`;
 
   els.searchInput.addEventListener("input", (event) => {
     state.search = event.target.value;
