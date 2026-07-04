@@ -58,7 +58,7 @@ function setSelectedToFirstVisible() {
 function setupCanvas(canvas) {
   const ctx = canvas.getContext("2d");
   const width = canvas.clientWidth;
-  const height = Number(canvas.getAttribute("height"));
+  const height = canvas.clientHeight || Number(canvas.getAttribute("height"));
   const dpr = window.devicePixelRatio || 1;
   canvas.width = width * dpr;
   canvas.height = height * dpr;
@@ -72,14 +72,39 @@ function drawFrame(ctx, width, height, padding, maxValue) {
   ctx.strokeStyle = "#dce5ec";
   ctx.fillStyle = "#5d6b78";
   ctx.font = "12px Segoe UI, Arial";
-  for (let i = 0; i <= 4; i += 1) {
-    const y = padding.top + chartHeight - (chartHeight * i) / 4;
+  const steps = 3;
+  for (let i = 0; i <= steps; i += 1) {
+    const y = padding.top + chartHeight - (chartHeight * i) / steps;
     ctx.beginPath();
     ctx.moveTo(padding.left, y);
     ctx.lineTo(width - padding.right, y);
     ctx.stroke();
-    ctx.fillText(formatNumber((maxValue * i) / 4), 10, y + 4);
+    ctx.textAlign = "right";
+    ctx.fillText(formatNumber((maxValue * i) / steps), padding.left - 12, y + 4);
   }
+  ctx.textAlign = "left";
+}
+
+function drawAnnualBars(ctx, width, height, padding, rows, maxValue, options = {}) {
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const count = Math.max(rows.length, 1);
+  const slotWidth = chartWidth / count;
+  const barWidth = Math.min(options.maxBarWidth || 140, Math.max(46, slotWidth * 0.58));
+
+  rows.forEach((row, index) => {
+    const x = padding.left + slotWidth * index + (slotWidth - barWidth) / 2;
+    const barHeight = Math.max((row.value / maxValue) * chartHeight, row.value > 0 ? 2 : 0);
+    const y = padding.top + chartHeight - barHeight;
+    ctx.fillStyle = index === rows.length - 1 ? "#19d4e7" : "#0f766e";
+    ctx.fillRect(x, y, barWidth, barHeight);
+    ctx.fillStyle = "#17212b";
+    ctx.textAlign = "center";
+    ctx.fillText(row.year, x + barWidth / 2, height - 18);
+    ctx.fillStyle = "#5d6b78";
+    ctx.fillText(formatNumber(row.value), x + barWidth / 2, Math.max(padding.top + 14, y - 8));
+  });
+  ctx.textAlign = "left";
 }
 
 function drawConsumptionTrend(item) {
@@ -91,36 +116,7 @@ function drawConsumptionTrend(item) {
     const rows = forecastRows(item);
     const maxValue = Math.max(...rows.map((row) => row.value), 1);
     drawFrame(ctx, width, height, padding, maxValue);
-
-    const points = rows.map((row, index) => ({
-      x: padding.left + (chartWidth * index) / Math.max(rows.length - 1, 1),
-      y: padding.top + chartHeight - (row.value / maxValue) * chartHeight,
-      year: row.year,
-      value: row.value,
-    }));
-
-    ctx.beginPath();
-    points.forEach((point, index) => {
-      if (index === 0) ctx.moveTo(point.x, point.y);
-      else ctx.lineTo(point.x, point.y);
-    });
-    ctx.strokeStyle = "#0f766e";
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    points.forEach((point) => {
-      ctx.fillStyle = "#0f766e";
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#5d6b78";
-      ctx.textAlign = "center";
-      ctx.fillText(formatNumber(point.value), point.x, point.y - 10);
-      ctx.fillStyle = "#17212b";
-      ctx.fillText(point.year, point.x, height - 22);
-    });
-
-    ctx.textAlign = "left";
+    drawAnnualBars(ctx, width, height, padding, rows, maxValue);
     ctx.fillStyle = "#0f766e";
     ctx.fillRect(width - 190, 18, 12, 12);
     ctx.fillText("Forecast quantity", width - 172, 29);
@@ -194,8 +190,6 @@ function drawConsumptionTrend(item) {
 function drawAnnualChart(item) {
   const { ctx, width, height } = setupCanvas(els.differenceChart);
   const padding = { top: 24, right: 30, bottom: 44, left: 92 };
-  const chartWidth = width - padding.left - padding.right;
-  const chartHeight = height - padding.top - padding.bottom;
   let rows = [];
   if (item.forecastOnly && item.forecastByYear) {
     rows = forecastRows(item);
@@ -210,22 +204,7 @@ function drawAnnualChart(item) {
   const maxValue = Math.max(...rows.map((row) => row.value), 1);
 
   drawFrame(ctx, width, height, padding, maxValue);
-
-  const gap = 30;
-  const barWidth = Math.max(42, (chartWidth - gap * (rows.length - 1)) / Math.max(rows.length, 1));
-  rows.forEach((row, index) => {
-    const x = padding.left + index * (barWidth + gap);
-    const barHeight = (row.value / maxValue) * chartHeight;
-    const y = padding.top + chartHeight - barHeight;
-    ctx.fillStyle = index === rows.length - 1 ? "#19d4e7" : "#0f766e";
-    ctx.fillRect(x, y, barWidth, barHeight);
-    ctx.fillStyle = "#17212b";
-    ctx.textAlign = "center";
-    ctx.fillText(row.year, x + barWidth / 2, height - 18);
-    ctx.fillStyle = "#5d6b78";
-    ctx.fillText(formatNumber(row.value), x + barWidth / 2, y - 8);
-  });
-  ctx.textAlign = "left";
+  drawAnnualBars(ctx, width, height, padding, rows, maxValue);
 }
 
 function renderOptions() {
