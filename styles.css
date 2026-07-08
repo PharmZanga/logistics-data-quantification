@@ -41,6 +41,8 @@ body {
   position: sticky;
   top: 0;
   height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar-title {
@@ -107,6 +109,29 @@ nav a:hover {
 nav a:not(.active) span {
   background: rgba(255, 255, 255, 0.12);
   color: #d6f5ea;
+}
+
+.sidebar-footer {
+  margin: auto -10px -22px;
+  padding: 18px 12px 20px;
+  background: #06442f;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+
+.sidebar-footer strong,
+.sidebar-footer span {
+  display: block;
+}
+
+.sidebar-footer strong {
+  font-weight: 850;
+}
+
+.sidebar-footer span {
+  font-weight: 750;
 }
 
 .page {
@@ -562,6 +587,10 @@ th:nth-child(3) {
   .sidebar {
     position: static;
     height: auto;
+  }
+
+  .sidebar-footer {
+    display: none;
   }
 
   nav {
