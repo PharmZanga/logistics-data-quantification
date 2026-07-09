@@ -14,6 +14,14 @@ CODE_CONSUMPTION_SOURCES = {
     "2025": Path(__file__).resolve().parents[1] / "data" / "rh-2025-consumption.tsv",
     "2026": Path(__file__).resolve().parents[1] / "data" / "rh-2026-consumption.tsv",
 }
+CONSOLIDATION_GROUPS = [
+    {
+        "codes": {"RH0034", "RH0061", "RH0009"},
+        "sku": "RH0034/RH0061/RH0009",
+        "product": "Medroxyprogesterone acetate injection",
+        "packSize": "Each",
+    }
+]
 SHEET_NAME = "CONSUMPTION DATA"
 ADJUSTED_SHEET_NAME = "Sheet1"
 FORECAST_SHEET_NAME = "Sheet1"
@@ -92,6 +100,80 @@ def apply_code_consumption(item, code_consumption):
     if not item.get("sku"):
         item["sku"] = code_consumption["code"]
     return item
+
+
+def add_year_maps(left, right):
+    result = dict(left or {})
+    for year, value in (right or {}).items():
+        result[year] = int(result.get(year, 0) or 0) + int(value or 0)
+    return result
+
+
+def add_value_lists(left, right):
+    if not left:
+        return list(right or [])
+    if not right:
+        return list(left or [])
+
+    merged = []
+    for left_value, right_value in zip(left, right):
+        if left_value is None and right_value is None:
+            merged.append(None)
+        else:
+            merged.append((left_value or 0) + (right_value or 0))
+    return merged
+
+
+def consolidate_source_rows(source_rows):
+    consolidated_rows = []
+    consumed_indexes = set()
+
+    for group in CONSOLIDATION_GROUPS:
+        group_codes = group["codes"]
+        matched = [
+            (index, item)
+            for index, item in enumerate(source_rows)
+            if clean_text(item.get("sku")).upper() in group_codes
+        ]
+        if len(matched) < 2:
+            continue
+
+        base = {
+            "sourceRow": min(item.get("sourceRow", 0) or 0 for _, item in matched),
+            "product": group["product"],
+            "packSize": group["packSize"],
+            "values": [],
+            "adjustedValues": [],
+            "differenceValues": [],
+            "hasAdjusted2025": False,
+            "forecastOnly": True,
+            "forecastByYear": {},
+            "forecastSourceName": " / ".join(item["product"] for _, item in matched),
+            "sku": group["sku"],
+            "annualConsumptionByYear": {},
+            "annualReportedConsumptionByYear": {},
+            "annualAdjustedConsumptionByYear": {},
+            "codeConsumptionRowsByYear": {},
+            "codeConsumption2024Rows": 0,
+        }
+
+        for index, item in matched:
+            consumed_indexes.add(index)
+            base["values"] = add_value_lists(base["values"], item.get("values", []))
+            base["adjustedValues"] = add_value_lists(base["adjustedValues"], item.get("adjustedValues", []))
+            base["differenceValues"] = add_value_lists(base["differenceValues"], item.get("differenceValues", []))
+            base["hasAdjusted2025"] = base["hasAdjusted2025"] or bool(item.get("hasAdjusted2025", False))
+            base["forecastOnly"] = base["forecastOnly"] and bool(item.get("forecastOnly", False))
+            base["forecastByYear"] = add_year_maps(base["forecastByYear"], item.get("forecastByYear", {}))
+            base["annualConsumptionByYear"] = add_year_maps(base["annualConsumptionByYear"], item.get("annualConsumptionByYear", {}))
+            base["annualReportedConsumptionByYear"] = add_year_maps(base["annualReportedConsumptionByYear"], item.get("annualReportedConsumptionByYear", {}))
+            base["annualAdjustedConsumptionByYear"] = add_year_maps(base["annualAdjustedConsumptionByYear"], item.get("annualAdjustedConsumptionByYear", {}))
+            base["codeConsumptionRowsByYear"] = add_year_maps(base["codeConsumptionRowsByYear"], item.get("codeConsumptionRowsByYear", {}))
+
+        base["codeConsumption2024Rows"] = base["codeConsumptionRowsByYear"].get("2024", 0)
+        consolidated_rows.append(base)
+
+    return [item for index, item in enumerate(source_rows) if index not in consumed_indexes] + consolidated_rows
 
 
 def load_adjusted_2025():
@@ -337,6 +419,8 @@ def main():
         )
         used_codes.add(code)
         code_consumption_added += 1
+
+    source_rows = consolidate_source_rows(source_rows)
 
     commodities = []
     for source_item in source_rows:
