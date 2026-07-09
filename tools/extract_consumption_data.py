@@ -12,6 +12,7 @@ OUTPUT = Path(__file__).resolve().parents[1] / "data" / "dashboard-data.js"
 CODE_CONSUMPTION_SOURCES = {
     "2024": Path(__file__).resolve().parents[1] / "data" / "rh-2024-consumption.tsv",
     "2025": Path(__file__).resolve().parents[1] / "data" / "rh-2025-consumption.tsv",
+    "2026": Path(__file__).resolve().parents[1] / "data" / "rh-2026-consumption.tsv",
 }
 SHEET_NAME = "CONSUMPTION DATA"
 ADJUSTED_SHEET_NAME = "Sheet1"
@@ -180,12 +181,13 @@ def load_code_consumption_by_year():
             if not raw_line.strip():
                 continue
             parts = raw_line.split("\t")
-            if len(parts) < 5:
+            if len(parts) < 4:
                 continue
 
             code = clean_text(parts[0]).upper()
             product = clean_text(parts[1]).replace("FALSE", "no")
-            values = [pd.to_numeric(value, errors="coerce") for value in parts[-3:]]
+            numeric_parts = parts[-3:] if len(parts) >= 5 else [parts[-2], parts[-1], parts[-2]]
+            values = [pd.to_numeric(value, errors="coerce") for value in numeric_parts]
             if not code.startswith("RH") or any(pd.isna(value) for value in values):
                 continue
 
