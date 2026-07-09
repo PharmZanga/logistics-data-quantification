@@ -16,10 +16,22 @@ CODE_CONSUMPTION_SOURCES = {
 }
 CONSOLIDATION_GROUPS = [
     {
-        "codes": {"RH0034", "RH0061", "RH0009"},
-        "sku": "RH0034/RH0061/RH0009",
-        "product": "Medroxyprogesterone acetate injection",
+        "codes": {"RH0061", "RH0009"},
+        "sku": "RH0061/RH0009",
+        "product": "Medroxyprogesterone acetate injection 150mg/ml",
         "packSize": "Each",
+    }
+]
+FALLBACK_FORECAST_ITEMS = [
+    {
+        "sourceRow": 0,
+        "product": "Medroxyprogesterone acetate injection 150mg/ml",
+        "packSize": "Each",
+        "values": [],
+        "forecastOnly": True,
+        "forecastByYear": {"2023": 2564114, "2024": 2350106, "2025": 2369074, "2026": 3107494},
+        "forecastSourceName": "Medroxyprogesterone acetate injection 150mg/ml",
+        "sku": "RH0061",
     }
 ]
 SHEET_NAME = "CONSUMPTION DATA"
@@ -212,7 +224,7 @@ def load_adjusted_2025():
 
 def load_forecast_commodities():
     if not FORECAST_SOURCE.exists():
-        return [], 0
+        return [dict(item) for item in FALLBACK_FORECAST_ITEMS], 0
 
     forecast_df = pd.read_excel(FORECAST_SOURCE, sheet_name=FORECAST_SHEET_NAME, header=1)
     forecast_df.columns = [clean_text(column) for column in forecast_df.columns]
@@ -305,6 +317,15 @@ def load_existing_consumption_payload():
     return json.loads(text[len(prefix) :].rstrip(";\n"))
 
 
+def should_reuse_existing_item(item, code_consumption_map):
+    sku = clean_text(item.get("sku")).upper()
+    if "/" in sku:
+        return False
+    if sku in code_consumption_map and item.get("sourceRow", 0) == 0 and item.get("forecastOnly", False):
+        return False
+    return True
+
+
 def main():
     adjusted_map, adjusted_pairs = load_adjusted_2025()
     forecast_items, forecast_rows = load_forecast_commodities()
@@ -368,6 +389,7 @@ def main():
                 "codeConsumption2024Rows": item.get("codeConsumption2024Rows", 0),
             }
             for index, item in enumerate(existing_payload["commodities"])
+            if should_reuse_existing_item(item, code_consumption_map)
         ]
         file_name = existing_payload["source"].get("fileName", SOURCE.name)
         generated_from = existing_payload["source"].get("generatedFrom", str(SOURCE))
