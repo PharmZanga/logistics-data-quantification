@@ -246,7 +246,7 @@ function renderProduct(item) {
   els.packSize.textContent = item.packSize;
   if (item.forecastOnly) {
     const sku = item.sku ? ` SKU ${item.sku}.` : "";
-    const sourceRows = item.codeConsumption2024Rows ? ` 2024 consumption combines ${formatNumber(item.codeConsumption2024Rows)} source entries.` : "";
+    const sourceRows = codeSourceRowTotal(item) ? ` Annual consumption combines ${formatNumber(codeSourceRowTotal(item))} source entries across ${codeSourceYears(item).join(", ")}.` : "";
     els.pairStatus.textContent = `Annual commodity record.${sku}${sourceRows}`;
     return;
   }
@@ -272,6 +272,14 @@ function annualConsumptionRows(item) {
 
 function annualYears(item) {
   return Array.from(new Set([...forecastRows(item).map((row) => row.year), ...annualConsumptionRows(item).map((row) => row.year)])).sort();
+}
+
+function codeSourceRowTotal(item) {
+  return Object.values(item.codeConsumptionRowsByYear || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+}
+
+function codeSourceYears(item) {
+  return Object.keys(item.codeConsumptionRowsByYear || {}).sort();
 }
 
 function renderWideTable(item) {
@@ -326,7 +334,7 @@ function renderWideTable(item) {
     els.monthlyTable.innerHTML = bodyRows;
 
     els.tableNote.textContent = hasConsumption
-      ? `Showing selected RH code once: ${item.sku || item.product}. ${formatNumber(item.codeConsumption2024Rows || 0)} source entries were summed into the 2024 consumption value.`
+      ? `Showing selected RH code once: ${item.sku || item.product}. ${formatNumber(codeSourceRowTotal(item))} source entries were summed across ${codeSourceYears(item).join(", ")}.`
       : `Showing selected forecast-only commodity: ${item.product}. These are annual forecast quantities from 2023 to 2026.`;
     return;
   }
@@ -412,8 +420,13 @@ function init() {
   const forecastNote = data.source.forecastOnlyCommodityRows
     ? ` ${formatNumber(data.source.forecastOnlyCommodityRows)} forecast-only commodities were added from ${data.source.forecastFileName}.`
     : "";
-  const codeConsumptionNote = data.source.codeConsumption2024Codes
-    ? ` ${formatNumber(data.source.codeConsumption2024Rows)} RH 2024 consumption rows were collapsed into ${formatNumber(data.source.codeConsumption2024Codes)} unique commodity codes.`
+  const codeRowsByYear = data.source.codeConsumptionRowsByYear || {};
+  const codeRowsText = Object.entries(codeRowsByYear)
+    .map(([year, rows]) => `${formatNumber(rows)} RH ${year} rows`)
+    .join(" and ");
+  const codeCount = data.source.codeConsumptionCodes || data.source.codeConsumption2024Codes;
+  const codeConsumptionNote = codeCount
+    ? ` ${codeRowsText} were collapsed into ${formatNumber(codeCount)} unique commodity codes.`
     : "";
   els.qualityNote.textContent = `${formatNumber(data.source.rawRows)} Excel rows were read from ${data.source.sheet}. ${formatNumber(
     data.source.commodityRows,
