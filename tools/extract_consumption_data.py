@@ -9,6 +9,7 @@ SOURCE = Path(r"C:\Users\Zanga Musakuzi\Downloads\EM CONSUMPTION DATA2024 TO 202
 ADJUSTED_SOURCE = Path(r"C:\Users\Zanga Musakuzi\Desktop\adjusted data EM 2025 consumption data.xlsx")
 FORECAST_SOURCE = Path(r"C:\Users\Zanga Musakuzi\Desktop\quantification 2026\FORECAST CONSOLIDATION FP 2023-2026.xlsx")
 OUTPUT = Path(__file__).resolve().parents[1] / "data" / "dashboard-data.js"
+CODE_CONSUMPTION_SOURCE = Path(__file__).resolve().parents[1] / "data" / "rh-2024-consumption.tsv"
 SHEET_NAME = "CONSUMPTION DATA"
 ADJUSTED_SHEET_NAME = "Sheet1"
 FORECAST_SHEET_NAME = "Sheet1"
@@ -61,6 +62,19 @@ def commodity_key(product, pack_size):
 
 def product_key(product):
     return clean_text(product).lower()
+
+
+def apply_code_consumption(item, code_consumption):
+    if not code_consumption:
+        return item
+
+    item["annualConsumptionByYear"] = {"2024": code_consumption["final2024"]}
+    item["annualReportedConsumptionByYear"] = {"2024": code_consumption["reported2024"]}
+    item["annualAdjustedConsumptionByYear"] = {"2024": code_consumption["adjusted2024"]}
+    item["codeConsumption2024Rows"] = code_consumption["sourceRows"]
+    if not item.get("sku"):
+        item["sku"] = code_consumption["code"]
+    return item
 
 
 def load_adjusted_2025():
@@ -138,6 +152,47 @@ def load_forecast_commodities():
     return list(forecast_items.values()), usable_rows
 
 
+def load_code_consumption_2024():
+    if not CODE_CONSUMPTION_SOURCE.exists():
+        return {}, 0
+
+    code_map = {}
+    raw_rows = 0
+    for raw_line in CODE_CONSUMPTION_SOURCE.read_text(encoding="utf-8").splitlines():
+        if not raw_line.strip():
+            continue
+        parts = raw_line.split("\t")
+        if len(parts) < 5:
+            continue
+
+        code = clean_text(parts[0]).upper()
+        product = clean_text(parts[1]).replace("FALSE", "no")
+        values = [pd.to_numeric(value, errors="coerce") for value in parts[-3:]]
+        if not code or any(pd.isna(value) for value in values):
+            continue
+
+        raw_rows += 1
+        if code not in code_map:
+            code_map[code] = {
+                "code": code,
+                "product": product,
+                "sourceRows": 0,
+                "reported2024": 0,
+                "adjusted2024": 0,
+                "final2024": 0,
+            }
+
+        item = code_map[code]
+        if len(product) > len(item["product"]):
+            item["product"] = product
+        item["sourceRows"] += 1
+        item["reported2024"] += int(round(float(values[0])))
+        item["adjusted2024"] += int(round(float(values[1])))
+        item["final2024"] += int(round(float(values[2])))
+
+    return code_map, raw_rows
+
+
 def load_existing_consumption_payload():
     if not OUTPUT.exists():
         return None
@@ -151,6 +206,7 @@ def load_existing_consumption_payload():
 def main():
     adjusted_map, adjusted_pairs = load_adjusted_2025()
     forecast_items, forecast_rows = load_forecast_commodities()
+    code_consumption_map, code_consumption_rows = load_code_consumption_2024()
     existing_payload = None
 
     if SOURCE.exists():
@@ -203,6 +259,10 @@ def main():
                 "forecastByYear": item.get("forecastByYear", {}),
                 "forecastSourceName": item.get("forecastSourceName", ""),
                 "sku": item.get("sku", ""),
+                "annualConsumptionByYear": item.get("annualConsumptionByYear", {}),
+                "annualReportedConsumptionByYear": item.get("annualReportedConsumptionByYear", {}),
+                "annualAdjustedConsumptionByYear": item.get("annualAdjustedConsumptionByYear", {}),
+                "codeConsumption2024Rows": item.get("codeConsumption2024Rows", 0),
             }
             for index, item in enumerate(existing_payload["commodities"])
         ]
@@ -210,6 +270,19 @@ def main():
         generated_from = existing_payload["source"].get("generatedFrom", str(SOURCE))
         if not adjusted_map:
             adjusted_pairs = existing_payload["source"].get("adjustedPairs2025", 0)
+
+    used_codes = set()
+    for source_item in source_rows:
+        code = clean_text(source_item.get("sku")).upper()
+        if code in code_consumption_map:
+            apply_code_consumption(source_item, code_consumption_map[code])
+            used_codes.add(code)
+
+    for forecast_item in forecast_items:
+        code = clean_text(forecast_item.get("sku")).upper()
+        if code in code_consumption_map:
+            apply_code_consumption(forecast_item, code_consumption_map[code])
+            used_codes.add(code)
 
     existing_product_keys = {product_key(item["product"]) for item in source_rows}
     forecast_added = 0
@@ -220,6 +293,29 @@ def main():
         source_rows.append(forecast_item)
         existing_product_keys.add(product_key(forecast_item["product"]))
         forecast_added += 1
+
+    code_consumption_added = 0
+    for code, code_item in sorted(code_consumption_map.items()):
+        if code in used_codes:
+            continue
+        product = code_item["product"] or code
+        source_rows.append(
+            apply_code_consumption(
+                {
+                    "sourceRow": 0,
+                    "product": product,
+                    "packSize": code,
+                    "values": [None for _ in months],
+                    "forecastOnly": True,
+                    "forecastByYear": {},
+                    "forecastSourceName": "",
+                    "sku": code,
+                },
+                code_item,
+            )
+        )
+        used_codes.add(code)
+        code_consumption_added += 1
 
     commodities = []
     for source_item in source_rows:
@@ -278,6 +374,10 @@ def main():
                 "forecastByYear": source_item.get("forecastByYear", {}),
                 "forecastSourceName": source_item.get("forecastSourceName", ""),
                 "sku": source_item.get("sku", ""),
+                "annualConsumptionByYear": source_item.get("annualConsumptionByYear", {}),
+                "annualReportedConsumptionByYear": source_item.get("annualReportedConsumptionByYear", {}),
+                "annualAdjustedConsumptionByYear": source_item.get("annualAdjustedConsumptionByYear", {}),
+                "codeConsumption2024Rows": source_item.get("codeConsumption2024Rows", 0),
                 "monthly": monthly,
                 "total": total,
                 "adjusted2025Total": int(sum(value for value in adjusted_values if value is not None)),
@@ -313,6 +413,10 @@ def main():
             "forecastFileName": FORECAST_SOURCE.name if FORECAST_SOURCE.exists() else "",
             "forecastRows": forecast_rows,
             "forecastOnlyCommodityRows": forecast_added,
+            "codeConsumption2024FileName": CODE_CONSUMPTION_SOURCE.name if CODE_CONSUMPTION_SOURCE.exists() else "",
+            "codeConsumption2024Rows": code_consumption_rows,
+            "codeConsumption2024Codes": len(code_consumption_map),
+            "codeConsumption2024OnlyCommodityRows": code_consumption_added,
             "generatedFrom": generated_from,
             "adjustedGeneratedFrom": str(ADJUSTED_SOURCE),
             "forecastGeneratedFrom": str(FORECAST_SOURCE) if FORECAST_SOURCE.exists() else "",
@@ -335,6 +439,7 @@ def main():
     print(f"Wrote {OUTPUT}")
     print(f"Commodity rows: {len(commodities):,}")
     print(f"Forecast-only rows added: {forecast_added:,}")
+    print(f"2024 RH consumption codes added: {code_consumption_added:,}")
     print(f"Period: {payload['source']['period']}")
 
 

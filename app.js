@@ -37,13 +37,14 @@ function formatNumber(value) {
 }
 
 function optionLabel(item) {
-  return `${item.product} | ${item.packSize}`;
+  const code = item.sku ? `${item.sku} | ` : "";
+  return `${code}${item.product} | ${item.packSize}`;
 }
 
 function filteredCommodities() {
   const term = state.search.trim().toLowerCase();
   if (!term) return data.commodities;
-  return data.commodities.filter((item) => `${item.product} ${item.packSize}`.toLowerCase().includes(term));
+  return data.commodities.filter((item) => `${item.sku || ""} ${item.product} ${item.packSize}`.toLowerCase().includes(term));
 }
 
 function selectedCommodity() {
@@ -113,13 +114,13 @@ function drawConsumptionTrend(item) {
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
   if (item.forecastOnly) {
-    const rows = forecastRows(item);
+    const rows = annualConsumptionRows(item).length ? annualConsumptionRows(item) : forecastRows(item);
     const maxValue = Math.max(...rows.map((row) => row.value), 1);
     drawFrame(ctx, width, height, padding, maxValue);
     drawAnnualBars(ctx, width, height, padding, rows, maxValue);
     ctx.fillStyle = "#0f766e";
     ctx.fillRect(width - 190, 18, 12, 12);
-    ctx.fillText("Forecast quantity", width - 172, 29);
+    ctx.fillText(annualConsumptionRows(item).length ? "Consumption" : "Forecast quantity", width - 172, 29);
     return;
   }
 
@@ -192,7 +193,7 @@ function drawAnnualChart(item) {
   const padding = { top: 24, right: 30, bottom: 44, left: 92 };
   let rows = [];
   if (item.forecastOnly && item.forecastByYear) {
-    rows = forecastRows(item);
+    rows = annualConsumptionRows(item).length ? annualConsumptionRows(item) : forecastRows(item);
   } else {
     const annual = {};
     item.monthly.forEach((entry) => {
@@ -219,13 +220,14 @@ function renderOptions() {
 
 function renderKpis(item) {
   if (item.forecastOnly) {
-    const rows = forecastRows(item);
+    const rows = annualConsumptionRows(item).length ? annualConsumptionRows(item) : forecastRows(item);
     const total = rows.reduce((sum, row) => sum + row.value, 0);
     const average = rows.length ? total / rows.length : 0;
     const highest = rows.reduce((best, row) => (row.value > best.value ? row : best), rows[0] || { year: "-", value: 0 });
     const lowest = rows.reduce((best, row) => (row.value < best.value ? row : best), rows[0] || { year: "-", value: 0 });
+    const hasAdjusted2024 = Object.prototype.hasOwnProperty.call(item.annualAdjustedConsumptionByYear || {}, "2024");
     els.kpiReported.textContent = formatNumber(total);
-    els.kpiAdjusted.textContent = "-";
+    els.kpiAdjusted.textContent = hasAdjusted2024 ? formatNumber(item.annualAdjustedConsumptionByYear["2024"]) : "-";
     els.kpiAverage.textContent = formatNumber(average);
     els.kpiHighest.textContent = `${highest.year} (${formatNumber(highest.value)})`;
     els.kpiLowest.textContent = `${lowest.year} (${formatNumber(lowest.value)})`;
@@ -244,7 +246,8 @@ function renderProduct(item) {
   els.packSize.textContent = item.packSize;
   if (item.forecastOnly) {
     const sku = item.sku ? ` SKU ${item.sku}.` : "";
-    els.pairStatus.textContent = `Forecast-only commodity added from the 2023-2026 consolidation workbook.${sku}`;
+    const sourceRows = item.codeConsumption2024Rows ? ` 2024 consumption combines ${formatNumber(item.codeConsumption2024Rows)} source entries.` : "";
+    els.pairStatus.textContent = `Annual commodity record.${sku}${sourceRows}`;
     return;
   }
   els.pairStatus.textContent = item.hasAdjusted2025 ? "2025 adjusted data matched" : "No 2025 adjusted row matched";
@@ -261,28 +264,70 @@ function forecastRows(item) {
     .sort((a, b) => Number(a.year) - Number(b.year));
 }
 
+function annualConsumptionRows(item) {
+  return Object.entries(item.annualConsumptionByYear || {})
+    .map(([year, value]) => ({ year, value }))
+    .sort((a, b) => Number(a.year) - Number(b.year));
+}
+
+function annualYears(item) {
+  return Array.from(new Set([...forecastRows(item).map((row) => row.year), ...annualConsumptionRows(item).map((row) => row.year)])).sort();
+}
+
 function renderWideTable(item) {
   if (item.forecastOnly) {
-    const rows = forecastRows(item);
+    const years = annualYears(item);
+    const forecastByYear = item.forecastByYear || {};
+    const consumptionByYear = item.annualConsumptionByYear || {};
+    const adjustedByYear = item.annualAdjustedConsumptionByYear || {};
+    const hasForecast = Object.keys(forecastByYear).length > 0;
+    const hasConsumption = Object.keys(consumptionByYear).length > 0;
+    const hasAdjusted = Object.keys(adjustedByYear).length > 0;
+    const yearCells = (source) => years.map((year) => `<td class="num">${formatNumber(source[year])}</td>`).join("");
+    const bodyRows = [
+      hasForecast
+        ? `
+      <tr>
+        <td>${item.product}</td>
+        <td>${item.packSize}</td>
+        <td>Forecast Quantity</td>
+        ${yearCells(forecastByYear)}
+      </tr>`
+        : "",
+      hasConsumption
+        ? `
+      <tr class="selected-row" data-id="${item.id}">
+        <td>${item.product}</td>
+        <td>${item.packSize}</td>
+        <td>Consumption</td>
+        ${yearCells(consumptionByYear)}
+      </tr>`
+        : "",
+      hasAdjusted
+        ? `
+      <tr>
+        <td>${item.product}</td>
+        <td>${item.packSize}</td>
+        <td>Adjusted Consumption</td>
+        ${yearCells(adjustedByYear)}
+      </tr>`
+        : "",
+    ].join("");
+
     els.tableHead.innerHTML = `
       <tr>
         <th>Product Description</th>
         <th>Pack Size</th>
         <th>Data Type</th>
-        ${rows.map((row) => `<th class="num">${row.year}</th>`).join("")}
+        ${years.map((year) => `<th class="num">${year}</th>`).join("")}
       </tr>
     `;
 
-    els.monthlyTable.innerHTML = `
-      <tr class="selected-row" data-id="${item.id}">
-        <td>${item.product}</td>
-        <td>${item.packSize}</td>
-        <td>Forecast Quantity</td>
-        ${rows.map((row) => `<td class="num">${formatNumber(row.value)}</td>`).join("")}
-      </tr>
-    `;
+    els.monthlyTable.innerHTML = bodyRows;
 
-    els.tableNote.textContent = `Showing selected forecast-only commodity: ${item.product}. These are annual forecast quantities from 2023 to 2026.`;
+    els.tableNote.textContent = hasConsumption
+      ? `Showing selected RH code once: ${item.sku || item.product}. ${formatNumber(item.codeConsumption2024Rows || 0)} source entries were summed into the 2024 consumption value.`
+      : `Showing selected forecast-only commodity: ${item.product}. These are annual forecast quantities from 2023 to 2026.`;
     return;
   }
 
@@ -325,10 +370,11 @@ function render() {
   renderOptions();
   const item = selectedCommodity();
   if (!item) return;
-  if (els.comparisonTitle) els.comparisonTitle.textContent = item.forecastOnly ? "Annual Forecast Trend" : "Consumption vs Adjusted Consumption";
-  if (els.comparisonSubtitle) els.comparisonSubtitle.textContent = item.forecastOnly ? "Forecast quantities from consolidation workbook" : "Adjusted values available for 2025";
-  if (els.annualTitle) els.annualTitle.textContent = item.forecastOnly ? "Annual Forecast Summary" : "Annual Consumption Summary";
-  if (els.annualSubtitle) els.annualSubtitle.textContent = item.forecastOnly ? "Forecast totals by year" : "Consumption totals by year";
+  const hasAnnualConsumption = annualConsumptionRows(item).length > 0;
+  if (els.comparisonTitle) els.comparisonTitle.textContent = item.forecastOnly && hasAnnualConsumption ? "Annual Consumption Trend" : item.forecastOnly ? "Annual Forecast Trend" : "Consumption vs Adjusted Consumption";
+  if (els.comparisonSubtitle) els.comparisonSubtitle.textContent = item.forecastOnly && hasAnnualConsumption ? "Duplicate RH code rows summed into one 2024 value" : item.forecastOnly ? "Forecast quantities from consolidation workbook" : "Adjusted values available for 2025";
+  if (els.annualTitle) els.annualTitle.textContent = item.forecastOnly && hasAnnualConsumption ? "Annual Consumption Summary" : item.forecastOnly ? "Annual Forecast Summary" : "Annual Consumption Summary";
+  if (els.annualSubtitle) els.annualSubtitle.textContent = item.forecastOnly && hasAnnualConsumption ? "Consumption totals by RH code" : item.forecastOnly ? "Forecast totals by year" : "Consumption totals by year";
   renderProduct(item);
   renderKpis(item);
   renderWideTable(item);
@@ -338,10 +384,14 @@ function render() {
 
 function downloadCsv() {
   const item = selectedCommodity();
-  const rows = forecastRows(item);
-  const headers = item.forecastOnly ? ["Product Description", "Pack Size", "Data Type", ...rows.map((row) => row.year)] : ["Product Description", "Pack Size", "Data Type", ...data.months];
+  const years = annualYears(item);
+  const headers = item.forecastOnly ? ["Product Description", "Pack Size", "Data Type", ...years] : ["Product Description", "Pack Size", "Data Type", ...data.months];
   const body = item.forecastOnly
-    ? [[item.product, item.packSize, "Forecast Quantity", ...rows.map((row) => row.value)]]
+    ? [
+        Object.keys(item.forecastByYear || {}).length ? [item.product, item.packSize, "Forecast Quantity", ...years.map((year) => item.forecastByYear[year] ?? "")] : null,
+        Object.keys(item.annualConsumptionByYear || {}).length ? [item.product, item.packSize, "Consumption", ...years.map((year) => item.annualConsumptionByYear[year] ?? "")] : null,
+        Object.keys(item.annualAdjustedConsumptionByYear || {}).length ? [item.product, item.packSize, "Adjusted Consumption", ...years.map((year) => item.annualAdjustedConsumptionByYear[year] ?? "")] : null,
+      ].filter(Boolean)
     : [
         [item.product, item.packSize, "Consumption", ...item.values],
         [item.product, item.packSize, "Adjusted Consumption", ...item.adjustedValues.map((value) => value ?? "")],
@@ -353,7 +403,7 @@ function downloadCsv() {
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = item.forecastOnly ? "forecast-commodity-output.csv" : "em-consumption-adjusted-difference.csv";
+  link.download = item.forecastOnly ? "annual-commodity-output.csv" : "em-consumption-adjusted-difference.csv";
   link.click();
   URL.revokeObjectURL(link.href);
 }
@@ -362,11 +412,14 @@ function init() {
   const forecastNote = data.source.forecastOnlyCommodityRows
     ? ` ${formatNumber(data.source.forecastOnlyCommodityRows)} forecast-only commodities were added from ${data.source.forecastFileName}.`
     : "";
+  const codeConsumptionNote = data.source.codeConsumption2024Codes
+    ? ` ${formatNumber(data.source.codeConsumption2024Rows)} RH 2024 consumption rows were collapsed into ${formatNumber(data.source.codeConsumption2024Codes)} unique commodity codes.`
+    : "";
   els.qualityNote.textContent = `${formatNumber(data.source.rawRows)} Excel rows were read from ${data.source.sheet}. ${formatNumber(
     data.source.commodityRows,
   )} commodity rows are shown from ${data.source.period}. 2025 adjusted consumption is matched from ${data.source.adjustedFileName}; ${formatNumber(
     data.source.adjustedMatchedCommodityRows,
-  )} selected consumption rows have a matching adjusted row.${forecastNote} Adjusted cells outside 2025 show as unavailable until those files are uploaded.`;
+  )} selected consumption rows have a matching adjusted row.${forecastNote}${codeConsumptionNote} Adjusted cells outside 2025 show as unavailable until those files are uploaded.`;
 
   els.searchInput.addEventListener("input", (event) => {
     state.search = event.target.value;
